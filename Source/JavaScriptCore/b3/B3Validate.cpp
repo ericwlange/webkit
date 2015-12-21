@@ -210,6 +210,7 @@ public:
                 VALIDATE(value->type() == Int32, ("At ", *value));
                 break;
             case Abs:
+            case Ceil:
             case Sqrt:
                 VALIDATE(value->numChildren() == 1, ("At ", *value));
                 VALIDATE(isFloat(value->child(0)->type()), ("At ", *value));
@@ -219,11 +220,6 @@ public:
                 VALIDATE(value->numChildren() == 1, ("At ", *value));
                 VALIDATE(isInt(value->child(0)->type()), ("At ", *value));
                 VALIDATE(value->type() == Double, ("At ", *value));
-                break;
-            case DToI32:
-                VALIDATE(value->numChildren() == 1, ("At ", *value));
-                VALIDATE(value->child(0)->type() == Double, ("At ", *value));
-                VALIDATE(value->type() == Int32, ("At ", *value));
                 break;
             case FloatToDouble:
                 VALIDATE(value->numChildren() == 1, ("At ", *value));
@@ -252,6 +248,12 @@ public:
                 VALIDATE(value->numChildren() == 2, ("At ", *value));
                 VALIDATE(value->child(0)->type() == value->child(1)->type(), ("At ", *value));
                 VALIDATE(isInt(value->child(0)->type()), ("At ", *value));
+                VALIDATE(value->type() == Int32, ("At ", *value));
+                break;
+            case EqualOrUnordered:
+                VALIDATE(value->numChildren() == 2, ("At ", *value));
+                VALIDATE(value->child(0)->type() == value->child(1)->type(), ("At ", *value));
+                VALIDATE(isFloat(value->child(0)->type()), ("At ", *value));
                 VALIDATE(value->type() == Int32, ("At ", *value));
                 break;
             case Select:

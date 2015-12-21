@@ -104,8 +104,8 @@ void NetworkLoad::continueWillSendRequest(const WebCore::ResourceRequest& newReq
 
     if (m_currentRequest.isNull()) {
 #if USE(NETWORK_SESSION)
-        // FIXME: Do something here.
-        notImplemented();
+        m_task->cancel();
+        m_client.didFailLoading(cancelledError(m_currentRequest));
 #else
         m_handle->cancel();
         didFail(m_handle.get(), cancelledError(m_currentRequest));
@@ -114,8 +114,9 @@ void NetworkLoad::continueWillSendRequest(const WebCore::ResourceRequest& newReq
     }
 
 #if USE(NETWORK_SESSION)
-    // FIXME: Do something here.
-    notImplemented();
+    ASSERT(m_redirectCompletionHandler);
+    m_redirectCompletionHandler(newRequest);
+    m_redirectCompletionHandler = nullptr;
 #else
     m_handle->continueWillSendRequest(m_currentRequest);
 #endif
@@ -148,8 +149,9 @@ void NetworkLoad::sharedWillSendRedirectedRequest(const ResourceRequest& request
     ASSERT(!redirectResponse.isNull());
     ASSERT(RunLoop::isMain());
 
+    auto oldRequest = m_currentRequest;
     m_currentRequest = request;
-    m_client.willSendRedirectedRequest(request, redirectResponse);
+    m_client.willSendRedirectedRequest(oldRequest, request, redirectResponse);
 }
 
 #if USE(NETWORK_SESSION)
@@ -161,10 +163,11 @@ void NetworkLoad::convertTaskToDownload()
     m_responseCompletionHandler = nullptr;
 }
 
-void NetworkLoad::willPerformHTTPRedirection(const ResourceResponse& response, const ResourceRequest& request, std::function<void(const ResourceRequest&)> completionHandler)
+void NetworkLoad::willPerformHTTPRedirection(const ResourceResponse& response, const ResourceRequest& request, RedirectCompletionHandler completionHandler)
 {
+    ASSERT(!m_redirectCompletionHandler);
+    m_redirectCompletionHandler = completionHandler;
     sharedWillSendRedirectedRequest(request, response);
-    completionHandler(request);
 }
 
 void NetworkLoad::didReceiveChallenge(const AuthenticationChallenge& challenge, std::function<void(AuthenticationChallengeDisposition, const Credential&)> completionHandler)

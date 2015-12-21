@@ -570,6 +570,25 @@ public:
         m_assembler.xorpd_rr(src, dst);
     }
 
+    void ceilDouble(FPRegisterID src, FPRegisterID dst)
+    {
+        m_assembler.roundsd_rr(src, dst, X86Assembler::RoundingType::TowardInfiniti);
+    }
+
+    void ceilDouble(Address src, FPRegisterID dst)
+    {
+        m_assembler.roundsd_mr(src.offset, src.base, dst, X86Assembler::RoundingType::TowardInfiniti);
+    }
+
+    void ceilFloat(FPRegisterID src, FPRegisterID dst)
+    {
+        m_assembler.roundss_rr(src, dst, X86Assembler::RoundingType::TowardInfiniti);
+    }
+
+    void ceilFloat(Address src, FPRegisterID dst)
+    {
+        m_assembler.roundss_mr(src.offset, src.base, dst, X86Assembler::RoundingType::TowardInfiniti);
+    }
 
     // Memory access operations:
     //
@@ -644,6 +663,16 @@ public:
     {
         m_assembler.movsbl_mr(address.offset, address.base, dest);
     }
+
+    void zeroExtend8To32(RegisterID src, RegisterID dest)
+    {
+        m_assembler.movzbl_rr(src, dest);
+    }
+    
+    void signExtend8To32(RegisterID src, RegisterID dest)
+    {
+        m_assembler.movsbl_rr(src, dest);
+    }
     
     void load16(BaseIndex address, RegisterID dest)
     {
@@ -665,6 +694,16 @@ public:
         m_assembler.movswl_mr(address.offset, address.base, dest);
     }
 
+    void zeroExtend16To32(RegisterID src, RegisterID dest)
+    {
+        m_assembler.movzwl_rr(src, dest);
+    }
+    
+    void signExtend16To32(RegisterID src, RegisterID dest)
+    {
+        m_assembler.movswl_rr(src, dest);
+    }
+    
     DataLabel32 store32WithAddressOffsetPatch(RegisterID src, Address address)
     {
         padBeforePatch();
@@ -1777,6 +1816,42 @@ public:
         return X86Assembler::maxJumpReplacementSize();
     }
 
+    static bool supportsFloatingPointCeil()
+    {
+        if (s_sse4_1CheckState == CPUIDCheckState::NotChecked) {
+            int flags = 0;
+#if COMPILER(MSVC)
+            int cpuInfo[4];
+            __cpuid(cpuInfo, 0x1);
+            flags = cpuInfo[2];
+#elif COMPILER(GCC_OR_CLANG)
+#if CPU(X86_64)
+            asm (
+                "movl $0x1, %%eax;"
+                "cpuid;"
+                "movl %%ecx, %0;"
+                : "=g" (flags)
+                :
+                : "%eax", "%ebx", "%ecx", "%edx"
+                );
+#else
+            asm (
+                "movl $0x1, %%eax;"
+                "pushl %%ebx;"
+                "cpuid;"
+                "popl %%ebx;"
+                "movl %%ecx, %0;"
+                : "=g" (flags)
+                :
+                : "%eax", "%ecx", "%edx"
+                );
+#endif
+#endif // COMPILER(GCC_OR_CLANG)
+            s_sse4_1CheckState = (flags & (1 << 19)) ? CPUIDCheckState::Set : CPUIDCheckState::Clear;
+        }
+        return s_sse4_1CheckState == CPUIDCheckState::Set;
+    }
+
 #if ENABLE(MASM_PROBE)
     void probe(ProbeFunction, void* arg1, void* arg2);
 #endif // ENABLE(MASM_PROBE)
@@ -1817,10 +1892,10 @@ protected:
         m_assembler.cmovl_rr(cond, src, dest);
 #endif
     }
-    
+
     static bool supportsLZCNT()
     {
-        if (s_lzcntCheckState == LZCNTCheckState::NotChecked) {
+        if (s_lzcntCheckState == CPUIDCheckState::NotChecked) {
             int flags = 0;
 #if COMPILER(MSVC)
             int cpuInfo[4];
@@ -1849,9 +1924,9 @@ protected:
                 );
 #endif
 #endif // COMPILER(GCC_OR_CLANG)
-            s_lzcntCheckState = (flags & 0x20) ? LZCNTCheckState::Set : LZCNTCheckState::Clear;
+            s_lzcntCheckState = (flags & 0x20) ? CPUIDCheckState::Set : CPUIDCheckState::Clear;
         }
-        return s_lzcntCheckState == LZCNTCheckState::Set;
+        return s_lzcntCheckState == CPUIDCheckState::Set;
     }
 
 private:
@@ -2021,12 +2096,13 @@ private:
 
 #endif
 
-    enum class LZCNTCheckState {
+    enum class CPUIDCheckState {
         NotChecked,
         Clear,
         Set
     };
-    static LZCNTCheckState s_lzcntCheckState;
+    static CPUIDCheckState s_sse4_1CheckState;
+    static CPUIDCheckState s_lzcntCheckState;
 };
 
 } // namespace JSC

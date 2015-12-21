@@ -147,10 +147,6 @@ public:
     
     LValue insertElement(LValue vector, LValue element, LValue index) { return buildInsertElement(m_builder, vector, element, index); }
 
-    LValue ceil64(LValue operand)
-    {
-        return call(doubleType, ceil64Intrinsic(), operand);
-    }
     LValue ctlz32(LValue operand)
     {
         return call(int32, ctlz32Intrinsic(), operand, booleanFalse);
@@ -182,6 +178,10 @@ public:
     LValue doubleAbs(LValue value)
     {
         return call(doubleType, doubleAbsIntrinsic(), value);
+    }
+    LValue doubleCeil(LValue operand)
+    {
+        return call(doubleType, ceil64Intrinsic(), operand);
     }
 
     LValue doubleSin(LValue value)
@@ -215,6 +215,8 @@ public:
 
     static bool hasSensibleDoubleToInt() { return isX86(); }
     LValue sensibleDoubleToInt(LValue);
+    LValue doubleToInt(LValue value) { return fpToInt32(value); }
+    LValue doubleToUInt(LValue value) { return fpToUInt32(value); }
 
     LValue signExt32To64(LValue value) { return signExt(value, int64); }
     LValue zeroExt(LValue value, LType type) { return buildZExt(m_builder, value, type); }
@@ -376,8 +378,7 @@ public:
     LValue doubleLessThanOrEqual(LValue left, LValue right) { return fcmp(LLVMRealOLE, left, right); }
     LValue doubleGreaterThan(LValue left, LValue right) { return fcmp(LLVMRealOGT, left, right); }
     LValue doubleGreaterThanOrEqual(LValue left, LValue right) { return fcmp(LLVMRealOGE, left, right); }
-    LValue doubleEqualOrUnordered(LValue left, LValue right) { return fcmp(LLVMRealUEQ, left, right); }
-    LValue doubleNotEqual(LValue left, LValue right) { return fcmp(LLVMRealONE, left, right); }
+    LValue doubleNotEqualAndOrdered(LValue left, LValue right) { return fcmp(LLVMRealONE, left, right); }
     LValue doubleLessThanOrUnordered(LValue left, LValue right) { return fcmp(LLVMRealULT, left, right); }
     LValue doubleLessThanOrEqualOrUnordered(LValue left, LValue right) { return fcmp(LLVMRealULE, left, right); }
     LValue doubleGreaterThanOrUnordered(LValue left, LValue right) { return fcmp(LLVMRealUGT, left, right); }

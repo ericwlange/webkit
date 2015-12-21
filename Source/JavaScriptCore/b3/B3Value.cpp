@@ -226,6 +226,11 @@ Value* Value::absConstant(Procedure&) const
     return nullptr;
 }
 
+Value* Value::ceilConstant(Procedure&) const
+{
+    return nullptr;
+}
+
 Value* Value::sqrtConstant(Procedure&) const
 {
     return nullptr;
@@ -281,6 +286,11 @@ TriState Value::belowEqualConstant(const Value*) const
     return MixedTriState;
 }
 
+TriState Value::equalOrUnorderedConstant(const Value*) const
+{
+    return MixedTriState;
+}
+
 Value* Value::invertedCompare(Procedure& proc) const
 {
     if (!numChildren())
@@ -310,6 +320,7 @@ bool Value::returnsBool() const
     case Below:
     case AboveEqual:
     case BelowEqual:
+    case EqualOrUnordered:
         return true;
     case Phi:
         // FIXME: We should have a story here.
@@ -363,6 +374,7 @@ Effects Value::effects() const
     case ZShr:
     case Clz:
     case Abs:
+    case Ceil:
     case Sqrt:
     case BitwiseCast:
     case SExt8:
@@ -371,7 +383,6 @@ Effects Value::effects() const
     case ZExt32:
     case Trunc:
     case IToD:
-    case DToI32:
     case FloatToDouble:
     case DoubleToFloat:
     case Equal:
@@ -384,6 +395,7 @@ Effects Value::effects() const
     case Below:
     case AboveEqual:
     case BelowEqual:
+    case EqualOrUnordered:
     case Select:
         break;
     case Div:
@@ -415,6 +427,8 @@ Effects Value::effects() const
     case CheckMul:
     case Check:
         result.exitsSideways = true;
+        // The program could read anything after exiting, and it's on us to declare this.
+        result.reads = HeapRange::top();
         break;
     case Upsilon:
         result.writesSSAState = true;
@@ -440,6 +454,7 @@ ValueKey Value::key() const
         return ValueKey(opcode(), type());
     case Identity:
     case Abs:
+    case Ceil:
     case Sqrt:
     case SExt8:
     case SExt16:
@@ -448,7 +463,6 @@ ValueKey Value::key() const
     case Clz:
     case Trunc:
     case IToD:
-    case DToI32:
     case FloatToDouble:
     case DoubleToFloat:
     case Check:
@@ -475,6 +489,7 @@ ValueKey Value::key() const
     case Below:
     case AboveEqual:
     case BelowEqual:
+    case EqualOrUnordered:
     case CheckAdd:
     case CheckSub:
     case CheckMul:
@@ -547,6 +562,7 @@ Type Value::typeFor(Opcode opcode, Value* firstChild, Value* secondChild)
     case ZShr:
     case Clz:
     case Abs:
+    case Ceil:
     case Sqrt:
     case CheckAdd:
     case CheckSub:
@@ -557,7 +573,6 @@ Type Value::typeFor(Opcode opcode, Value* firstChild, Value* secondChild)
     case SExt8:
     case SExt16:
     case Trunc:
-    case DToI32:
     case Equal:
     case NotEqual:
     case LessThan:
@@ -568,6 +583,7 @@ Type Value::typeFor(Opcode opcode, Value* firstChild, Value* secondChild)
     case Below:
     case AboveEqual:
     case BelowEqual:
+    case EqualOrUnordered:
         return Int32;
     case SExt32:
     case ZExt32:

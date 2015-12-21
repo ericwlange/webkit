@@ -1,3 +1,125 @@
+2015-12-20  Michael Catanzaro  <mcatanzaro@igalia.com>
+
+        [SOUP] Performs DNS prefetch when a proxy is configured (information leak)
+        https://bugs.webkit.org/show_bug.cgi?id=145542
+
+        Reviewed by Darin Adler.
+
+        Specialize GUniquePtr<char*>, using g_strfreev.
+
+        * wtf/glib/GUniquePtr.h:
+
+2015-12-19  Dan Bernstein  <mitz@apple.com>
+
+        [Mac] WebKit contains dead source code for OS X Mavericks and earlier
+        https://bugs.webkit.org/show_bug.cgi?id=152462
+
+        Reviewed by Alexey Proskuryakov.
+
+        * Configurations/DebugRelease.xcconfig: Removed definition of MACOSX_DEPLOYMENT_TARGET for
+          OS X 10.9.
+
+        - Simplified expressions involving __MAC_OS_X_VERSION_MIN_REQUIRED and removed code that was
+          never getting compiled:
+
+        * wtf/FeatureDefines.h:
+        * wtf/MainThread.h:
+        * wtf/OSObjectPtr.h:
+        * wtf/Platform.h:
+        * wtf/mac/DeprecatedSymbolsUsedBySafari.mm:
+        * wtf/spi/darwin/XPCSPI.h:
+
+2015-12-17  Sukolsak Sakshuwong  <sukolsak@gmail.com>
+
+        [INTL] Implement Collator Compare Functions
+        https://bugs.webkit.org/show_bug.cgi?id=147604
+
+        Reviewed by Darin Adler.
+
+        * wtf/unicode/Collator.h:
+
+2015-12-16  Andreas Kling  <akling@apple.com>
+
+        Give kernel VM some hints about non-live memory-cached resources.
+        <https://webkit.org/b/152362>
+
+        Reviewed by Geoffrey Garen.
+
+        Add an API to OSAllocator for hinting to the OS that a range of memory
+        is not expected to be used anytime soon.
+
+        * wtf/OSAllocator.h:
+        * wtf/OSAllocatorPosix.cpp:
+        (WTF::OSAllocator::hintMemoryNotNeededSoon):
+        * wtf/OSAllocatorWin.cpp:
+        (WTF::OSAllocator::hintMemoryNotNeededSoon):
+        * wtf/Platform.h:
+
+2015-12-16  Alex Christensen  <achristensen@webkit.org>
+
+        Fix internal Windows build
+        https://bugs.webkit.org/show_bug.cgi?id=152364
+        rdar://problem/23928759
+
+        Reviewed by Tim Horton.
+
+        * WTF.vcxproj/WTF.proj:
+
+2015-12-16  Youenn Fablet  <youenn.fablet@crf.canon.fr>
+
+        [Fetch API] Add fetch API compile time flag
+        https://bugs.webkit.org/show_bug.cgi?id=152254
+
+        Reviewed by Darin Adler.
+
+        * wtf/FeatureDefines.h:
+
+2015-12-14  Yusuke Suzuki  <utatane.tea@gmail.com>
+
+        Math.random should have an intrinsic thunk and it should be later handled as a DFG Node
+        https://bugs.webkit.org/show_bug.cgi?id=152133
+
+        Reviewed by Geoffrey Garen.
+
+        Change 64bit random to double logic to convert efficiently.
+
+        * wtf/WeakRandom.h:
+        (WTF::WeakRandom::get):
+        (WTF::WeakRandom::lowOffset):
+        (WTF::WeakRandom::highOffset):
+
+2015-12-14  Sukolsak Sakshuwong  <sukolsak@gmail.com>
+
+        Make UCharIterator createIterator(StringView) visible to other classes
+        https://bugs.webkit.org/show_bug.cgi?id=151917
+
+        Reviewed by Darin Adler.
+
+        Make UCharIterator createIterator(StringView) in CollatorICU.cpp visible
+        to other classes so that future patches that will ucol_strcollIter
+        (including Bug 147604) can use it.
+
+        * wtf/unicode/Collator.h:
+        * wtf/unicode/icu/CollatorICU.cpp:
+        (WTF::createIterator):
+
+2015-12-14  David Kilzer  <ddkilzer@apple.com>
+
+        REGRESSION (r162777): Remove Boost Software License from WTF
+        <http://webkit.org/b/152243>
+
+        Reviewed by Darin Adler.
+
+        The source code that the Boost Software License was referring to
+        was removed in r162777 by switching to std::atomic.
+
+        * wtf/Atomics.cpp:
+        * wtf/Atomics.h:
+        * wtf/ThreadSafeRefCounted.h:
+        - Remove Boost Software License.
+        - Update Apple Inc. copyright as needed.
+        - Refresh Apple Inc. license text.
+
 2015-12-10  Joseph Pecoraro  <pecoraro@apple.com>
 
         Remote Inspector: Verify the identity of the other side of XPC connections

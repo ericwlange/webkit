@@ -44,11 +44,12 @@ class Opcode
 end
 
 class Arg
-    attr_reader :role, :type
+    attr_reader :role, :type, :width
 
-    def initialize(role, type)
+    def initialize(role, type, width)
         @role = role
         @type = type
+        @width = width
     end
 end
 
@@ -92,11 +93,12 @@ class Kind
 end
 
 class Form
-    attr_reader :kinds, :altName
+    attr_reader :kinds, :altName, :archs
 
-    def initialize(kinds, altName)
+    def initialize(kinds, altName, archs)
         @kinds = kinds
         @altName = altName
+        @archs = archs
     end
 end
 
@@ -172,7 +174,7 @@ def lex(str, fileName)
 end
 
 def isUD(token)
-    token =~ /\A((U)|(D)|(UD)|(UA))\Z/
+    token =~ /\A((U)|(D)|(UD)|(ZD)|(UZD)|(UA))\Z/
 end
 
 def isGF(token)
@@ -183,8 +185,16 @@ def isKind(token)
     token =~ /\A((Tmp)|(Imm)|(Imm64)|(Addr)|(Index)|(RelCond)|(ResCond)|(DoubleCond))\Z/
 end
 
+def isArch(token)
+    token =~ /\A((x86)|(x86_32)|(x86_64)|(arm)|(armv7)|(arm64)|(32)|(64))\Z/
+end
+
+def isWidth(token)
+    token =~ /\A((8)|(16)|(32)|(64)|(Ptr))\Z/
+end
+
 def isKeyword(token)
-    isUD(token) or isGF(token) or isKind(token) or
+    isUD(token) or isGF(token) or isKind(token) or isArch(token) or isWidth(token) or
         token == "special" or token == "as"
 end
 
@@ -251,6 +261,73 @@ class Parser
         result
     end
 
+    def consumeWidth
+        result = token.string
+        parseError("Expected width (8, 16, 32, or 64)") unless isWidth(result)
+        advance
+        result
+    end
+
+    def parseArchs
+        return nil unless isArch(token)
+
+        result = []
+        while isArch(token)
+            case token.string
+            when "x86"
+                result << "X86"
+                result << "X86_64"
+            when "x86_32"
+                result << "X86"
+            when "x86_64"
+                result << "X86_64"
+            when "arm"
+                result << "ARMv7"
+                result << "ARM64"
+            when "armv7"
+                result << "ARMv7"
+            when "arm64"
+                result << "ARM64"
+            when "32"
+                result << "X86"
+                result << "ARMv7"
+            when "64"
+                result << "X86_64"
+                result << "ARM64"
+            else
+                raise token.string
+            end
+            advance
+        end
+
+        consume(":")
+        @lastArchs = result
+    end
+
+    def consumeArchs
+        result = @lastArchs
+        @lastArchs = nil
+        result
+    end
+
+    def parseAndConsumeArchs
+        parseArchs
+        consumeArchs
+    end
+
+    def intersectArchs(left, right)
+        return left unless right
+        return right unless left
+
+        left.select {
+            | value |
+            right.find {
+                | otherValue |
+                value == otherValue
+            }
+        }
+    end
+
     def parse
         result = {}
         
@@ -265,6 +342,8 @@ class Parser
 
                 result[opcodeName] = Opcode.new(opcodeName, true)
             else
+                opcodeArchs = parseAndConsumeArchs
+
                 opcodeName = consumeIdentifier
 
                 if result[opcodeName]
@@ -283,8 +362,10 @@ class Parser
                         role = consumeRole
                         consume(":")
                         type = consumeType
+                        consume(":")
+                        width = consumeWidth
                         
-                        signature << Arg.new(role, type)
+                        signature << Arg.new(role, type, width)
                         
                         break unless token == ","
                         consume(",")
@@ -306,10 +387,12 @@ class Parser
                     advance
                 end
 
+                parseArchs
                 if isKind(token)
                     loop {
                         kinds = []
                         altName = nil
+                        formArchs = consumeArchs
                         loop {
                             kinds << Kind.new(consumeKind)
 
@@ -340,14 +423,16 @@ class Parser
                                 end
                             end
                         }
-                        forms << Form.new(kinds, altName)
+                        forms << Form.new(kinds, altName, intersectArchs(opcodeArchs, formArchs))
+
+                        parseArchs
                         break unless isKind(token)
                     }
                 end
 
                 if signature.length == 0
                     raise unless forms.length == 0
-                    forms << Form.new([], nil)
+                    forms << Form.new([], nil, opcodeArchs)
                 end
 
                 opcode.overloads << Overload.new(signature, forms)
@@ -412,6 +497,7 @@ def matchForms(outp, speed, forms, columnIndex, columnGetter, filter, callback)
     if columnIndex >= forms[0].kinds.length
         raise "Did not reduce to one form: #{forms.inspect}" unless forms.length == 1
         callback[forms[0]]
+        outp.puts "break;"
         return
     end
     
@@ -497,6 +583,23 @@ def matchInstOverloadForm(outp, speed, inst)
     }
 end
 
+def beginArchs(outp, archs)
+    return unless archs
+    if archs.empty?
+        outp.puts "#if 0"
+        return
+    end
+    outp.puts("#if " + archs.map {
+                  | arch |
+                  "CPU(#{arch})"
+              }.join(" || "))
+end
+
+def endArchs(outp, archs)
+    return unless archs
+    outp.puts "#endif"
+end
+
 writeH("OpcodeUtils") {
     | outp |
     outp.puts "#include \"AirInst.h\""
@@ -517,26 +620,37 @@ writeH("OpcodeUtils") {
     matchInstOverload(outp, :fast, "this") {
         | opcode, overload |
         if opcode.special
-            outp.puts "functor(args[0], Arg::Use, Arg::GP); // This is basically bogus, but it works f analyses model Special as an immediate."
+            outp.puts "functor(args[0], Arg::Use, Arg::GP, Arg::pointerWidth()); // This is basically bogus, but it works for analyses that model Special as an immediate."
             outp.puts "args[0].special()->forEachArg(*this, scopedLambda<EachArgCallback>(functor));"
         else
             overload.signature.each_with_index {
                 | arg, index |
+                
                 role = nil
                 case arg.role
                 when "U"
                     role = "Use"
                 when "D"
                     role = "Def"
+                when "ZD"
+                    role = "ZDef"
                 when "UD"
                     role = "UseDef"
+                when "UZD"
+                    role = "UseZDef"
                 when "UA"
                     role = "UseAddr"
                 else
                     raise
                 end
+
+                if arg.width == "Ptr"
+                    width = "Arg::pointerWidth()"
+                else
+                    width = "Arg::Width#{arg.width}"
+                end
                 
-                outp.puts "functor(args[#{index}], Arg::#{role}, Arg::#{arg.type}P);"
+                outp.puts "functor(args[#{index}], Arg::#{role}, Arg::#{arg.type}P, #{width});"
             }
         end
     }
@@ -559,8 +673,10 @@ writeH("OpcodeUtils") {
                 filter = proc { false }
                 callback = proc {
                     | form |
-                    special = (not form.kinds.detect { | kind | kind.special })
-                    outp.puts "OPGEN_RETURN(#{special});"
+                    notSpecial = (not form.kinds.detect { | kind | kind.special })
+                    beginArchs(outp, form.archs)
+                    outp.puts "OPGEN_RETURN(#{notSpecial});"
+                    endArchs(outp, form.archs)
                 }
                 matchForms(outp, :safe, overload.forms, 0, columnGetter, filter, callback)
                 outp.puts "break;"
@@ -626,6 +742,7 @@ writeH("OpcodeGenerated") {
             outp.puts "return false;"
             outp.puts "OPGEN_RETURN(args[0].special()->isValid(*this));"
         else
+            beginArchs(outp, form.archs)
             needsMoreValidation = false
             overload.signature.length.times {
                 | index |
@@ -647,6 +764,7 @@ writeH("OpcodeGenerated") {
                 outp.puts "OPGEN_RETURN(false);"
             end
             outp.puts "OPGEN_RETURN(true);"
+            endArchs(outp, form.archs)
         end
     }
     outp.puts "return false;"
@@ -720,7 +838,7 @@ writeH("OpcodeGenerated") {
                         }
 
                         if numYes == 0
-                        # Don't emit anything, just drop to default.
+                            # Don't emit anything, just drop to default.
                         elsif numNo == 0
                             outp.puts "case #{overload.signature.length}:" if needOverloadSwitch
                             outp.puts "OPGEN_RETURN(true);"
@@ -758,7 +876,10 @@ writeH("OpcodeGenerated") {
                                 end
                             }
                             callback = proc {
+                                | form |
+                                beginArchs(outp, form.archs)
                                 outp.puts "OPGEN_RETURN(true);"
+                                endArchs(outp, form.archs)
                             }
                             matchForms(outp, :safe, overload.forms, 0, columnGetter, filter, callback)
 
@@ -858,6 +979,7 @@ writeH("OpcodeGenerated") {
         if opcode.special
             outp.puts "OPGEN_RETURN(args[0].special()->generate(*this, jit, context));"
         else
+            beginArchs(outp, form.archs)
             if form.altName
                 methodName = form.altName
             else
@@ -899,6 +1021,7 @@ writeH("OpcodeGenerated") {
 
             outp.puts ");"
             outp.puts "OPGEN_RETURN(result);"
+            endArchs(outp, form.archs)
         end
     }
     outp.puts "RELEASE_ASSERT_NOT_REACHED();"

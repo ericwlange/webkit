@@ -76,6 +76,7 @@ public:
 
     // This is useful when lowering. Note that this is only valid for non-void values.
     Air::Arg::Type airType() const { return Air::Arg::typeForB3Type(type()); }
+    Air::Arg::Width airWidth() const { return Air::Arg::widthForB3Type(type()); }
 
     AdjacencyList& children() { return m_children; } 
     const AdjacencyList& children() const { return m_children; }
@@ -132,6 +133,7 @@ public:
     virtual Value* doubleToFloatConstant(Procedure&) const;
     virtual Value* floatToDoubleConstant(Procedure&) const;
     virtual Value* absConstant(Procedure&) const;
+    virtual Value* ceilConstant(Procedure&) const;
     virtual Value* sqrtConstant(Procedure&) const;
 
     virtual TriState equalConstant(const Value* other) const;
@@ -144,6 +146,7 @@ public:
     virtual TriState belowConstant(const Value* other) const;
     virtual TriState aboveEqualConstant(const Value* other) const;
     virtual TriState belowEqualConstant(const Value* other) const;
+    virtual TriState equalOrUnorderedConstant(const Value* other) const;
 
     // If the value is a comparison then this returns the inverted form of that comparison, if
     // possible. It can be impossible for double comparisons, where for example LessThan and

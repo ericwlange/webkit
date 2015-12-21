@@ -1199,6 +1199,7 @@ public:
     static bool supportsFloatingPointTruncate() { return true; }
     static bool supportsFloatingPointSqrt() { return true; }
     static bool supportsFloatingPointAbs() { return true; }
+    static bool supportsFloatingPointCeil() { return true; }
 
     enum BranchTruncateType { BranchIfTruncateFailed, BranchIfTruncateSuccessful };
 
@@ -2327,14 +2328,14 @@ public:
 
     void test32(ResultCondition cond, Address address, TrustedImm32 mask, RegisterID dest)
     {
-        load32(address, getCachedDataTempRegisterIDAndInvalidate());
-        test32(cond, dataTempRegister, mask, dest);
+        load32(address, getCachedMemoryTempRegisterIDAndInvalidate());
+        test32(cond, memoryTempRegister, mask, dest);
     }
 
     void test8(ResultCondition cond, Address address, TrustedImm32 mask, RegisterID dest)
     {
-        load8(address, getCachedDataTempRegisterIDAndInvalidate());
-        test32(cond, dataTempRegister, mask, dest);
+        load8(address, getCachedMemoryTempRegisterIDAndInvalidate());
+        test32(cond, memoryTempRegister, mask, dest);
     }
 
     void test64(ResultCondition cond, RegisterID op1, RegisterID op2, RegisterID dest)

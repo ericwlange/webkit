@@ -71,8 +71,16 @@ using namespace JSC::B3;
 
 namespace {
 
+StaticLock crashLock;
+
 // Nothing fancy for now; we just use the existing WTF assertion machinery.
-#define CHECK(x) RELEASE_ASSERT(x)
+#define CHECK(x) do {                                                   \
+        if (!!(x))                                                      \
+            break;                                                      \
+        crashLock.lock();                                               \
+        WTFReportAssertionFailure(__FILE__, __LINE__, WTF_PRETTY_FUNCTION, #x); \
+        CRASH();                                                        \
+    } while (false)
 
 VM* vm;
 
@@ -3227,6 +3235,175 @@ void testAbsArgWithEffectfulDoubleConversion(float a)
     CHECK(isIdentical(effect, fabs(a)));
 }
 
+void testCeilArg(double a)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, Ceil, Origin(),
+                root->appendNew<ArgumentRegValue>(proc, Origin(), FPRInfo::argumentFPR0)));
+
+    CHECK(isIdentical(compileAndRun<double>(proc, a), ceil(a)));
+}
+
+void testCeilImm(double a)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* argument = root->appendNew<ConstDoubleValue>(proc, Origin(), a);
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(proc, Ceil, Origin(), argument));
+
+    CHECK(isIdentical(compileAndRun<double>(proc), ceil(a)));
+}
+
+void testCeilMem(double a)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* address = root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0);
+    MemoryValue* loadDouble = root->appendNew<MemoryValue>(proc, Load, Double, Origin(), address);
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(proc, Ceil, Origin(), loadDouble));
+
+    CHECK(isIdentical(compileAndRun<double>(proc, &a), ceil(a)));
+}
+
+void testCeilCeilArg(double a)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* firstCeil = root->appendNew<Value>(proc, Ceil, Origin(),
+        root->appendNew<ArgumentRegValue>(proc, Origin(), FPRInfo::argumentFPR0));
+    Value* secondCeil = root->appendNew<Value>(proc, Ceil, Origin(), firstCeil);
+    root->appendNew<ControlValue>(proc, Return, Origin(), secondCeil);
+
+    CHECK(isIdentical(compileAndRun<double>(proc, a), ceil(a)));
+}
+
+void testCeilIToD64(int64_t a)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* argument = root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0);
+    Value* argumentAsDouble = root->appendNew<Value>(proc, IToD, Origin(), argument);
+
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(proc, Ceil, Origin(), argumentAsDouble));
+
+    CHECK(isIdentical(compileAndRun<double>(proc, a), ceil(static_cast<double>(a))));
+}
+
+void testCeilIToD32(int64_t a)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* argument = root->appendNew<Value>(proc, Trunc, Origin(),
+        root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0));
+    Value* argumentAsDouble = root->appendNew<Value>(proc, IToD, Origin(), argument);
+
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(proc, Ceil, Origin(), argumentAsDouble));
+
+    CHECK(isIdentical(compileAndRun<double>(proc, a), ceil(static_cast<double>(a))));
+}
+
+void testCeilArg(float a)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* argument32 = root->appendNew<Value>(proc, Trunc, Origin(),
+        root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0));
+    Value* argument = root->appendNew<Value>(proc, BitwiseCast, Origin(), argument32);
+    Value* result = root->appendNew<Value>(proc, Ceil, Origin(), argument);
+    Value* result32 = root->appendNew<Value>(proc, BitwiseCast, Origin(), result);
+    root->appendNew<ControlValue>(proc, Return, Origin(), result32);
+
+    CHECK(isIdentical(compileAndRun<int32_t>(proc, bitwise_cast<int32_t>(a)), bitwise_cast<int32_t>(ceilf(a))));
+}
+
+void testCeilImm(float a)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* argument = root->appendNew<ConstFloatValue>(proc, Origin(), a);
+    Value* result = root->appendNew<Value>(proc, Ceil, Origin(), argument);
+    Value* result32 = root->appendNew<Value>(proc, BitwiseCast, Origin(), result);
+    root->appendNew<ControlValue>(proc, Return, Origin(), result32);
+
+    CHECK(isIdentical(compileAndRun<int32_t>(proc, bitwise_cast<int32_t>(a)), bitwise_cast<int32_t>(ceilf(a))));
+}
+
+void testCeilMem(float a)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* address = root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0);
+    MemoryValue* loadFloat = root->appendNew<MemoryValue>(proc, Load, Float, Origin(), address);
+    Value* result = root->appendNew<Value>(proc, Ceil, Origin(), loadFloat);
+    Value* result32 = root->appendNew<Value>(proc, BitwiseCast, Origin(), result);
+    root->appendNew<ControlValue>(proc, Return, Origin(), result32);
+
+    CHECK(isIdentical(compileAndRun<int32_t>(proc, &a), bitwise_cast<int32_t>(ceilf(a))));
+}
+
+void testCeilCeilArg(float a)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* argument32 = root->appendNew<Value>(proc, Trunc, Origin(),
+        root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0));
+    Value* argument = root->appendNew<Value>(proc, BitwiseCast, Origin(), argument32);
+    Value* firstCeil = root->appendNew<Value>(proc, Ceil, Origin(), argument);
+    Value* secondCeil = root->appendNew<Value>(proc, Ceil, Origin(), firstCeil);
+    root->appendNew<ControlValue>(proc, Return, Origin(), secondCeil);
+
+    CHECK(isIdentical(compileAndRun<float>(proc, bitwise_cast<int32_t>(a)), ceilf(a)));
+}
+
+void testCeilArgWithUselessDoubleConversion(float a)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* argument32 = root->appendNew<Value>(proc, Trunc, Origin(),
+        root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0));
+    Value* floatValue = root->appendNew<Value>(proc, BitwiseCast, Origin(), argument32);
+    Value* asDouble = root->appendNew<Value>(proc, FloatToDouble, Origin(), floatValue);
+    Value* result = root->appendNew<Value>(proc, Ceil, Origin(), asDouble);
+    Value* floatResult = root->appendNew<Value>(proc, DoubleToFloat, Origin(), result);
+    Value* result32 = root->appendNew<Value>(proc, BitwiseCast, Origin(), floatResult);
+    root->appendNew<ControlValue>(proc, Return, Origin(), result32);
+
+    CHECK(isIdentical(compileAndRun<int32_t>(proc, bitwise_cast<int32_t>(a)), bitwise_cast<int32_t>(ceilf(a))));
+}
+
+void testCeilArgWithEffectfulDoubleConversion(float a)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* argument32 = root->appendNew<Value>(proc, Trunc, Origin(),
+        root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0));
+    Value* floatValue = root->appendNew<Value>(proc, BitwiseCast, Origin(), argument32);
+    Value* asDouble = root->appendNew<Value>(proc, FloatToDouble, Origin(), floatValue);
+    Value* result = root->appendNew<Value>(proc, Ceil, Origin(), asDouble);
+    Value* floatResult = root->appendNew<Value>(proc, DoubleToFloat, Origin(), result);
+    Value* result32 = root->appendNew<Value>(proc, BitwiseCast, Origin(), floatResult);
+    Value* doubleAddress = root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR1);
+    root->appendNew<MemoryValue>(proc, Store, Origin(), result, doubleAddress);
+    root->appendNew<ControlValue>(proc, Return, Origin(), result32);
+
+    double effect = 0;
+    int32_t resultValue = compileAndRun<int32_t>(proc, bitwise_cast<int32_t>(a), &effect);
+    CHECK(isIdentical(resultValue, bitwise_cast<int32_t>(ceilf(a))));
+    CHECK(isIdentical(effect, ceilf(a)));
+}
+
 void testSqrtArg(double a)
 {
     Procedure proc;
@@ -3393,6 +3570,23 @@ void testBitwiseCastOnDoubleInMemory(double value)
     CHECK(isIdentical(compileAndRun<int64_t>(proc, &value), bitwise_cast<int64_t>(value)));
 }
 
+void testBitwiseCastOnDoubleInMemoryIndexed(double value)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* base = root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0);
+    Value* offset = root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR1);
+    Value* scaledOffset = root->appendNew<Value>(proc, Shl, Origin(),
+        offset,
+        root->appendNew<Const32Value>(proc, Origin(), 3));
+    Value* address = root->appendNew<Value>(proc, Add, Origin(), base, scaledOffset);
+    MemoryValue* loadDouble = root->appendNew<MemoryValue>(proc, Load, Double, Origin(), address);
+    Value* cast = root->appendNew<Value>(proc, BitwiseCast, Origin(), loadDouble);
+    root->appendNew<ControlValue>(proc, Return, Origin(), cast);
+
+    CHECK(isIdentical(compileAndRun<int64_t>(proc, &value, 0), bitwise_cast<int64_t>(value)));
+}
+
 void testInt64BArgToDoubleBitwiseCast(int64_t value)
 {
     Procedure proc;
@@ -3443,6 +3637,23 @@ void testBitwiseCastOnInt64InMemory(int64_t value)
     root->appendNew<ControlValue>(proc, Return, Origin(), cast);
 
     CHECK(isIdentical(compileAndRun<double>(proc, &value), bitwise_cast<double>(value)));
+}
+
+void testBitwiseCastOnInt64InMemoryIndexed(int64_t value)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* base = root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0);
+    Value* offset = root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR1);
+    Value* scaledOffset = root->appendNew<Value>(proc, Shl, Origin(),
+        offset,
+        root->appendNew<Const32Value>(proc, Origin(), 3));
+    Value* address = root->appendNew<Value>(proc, Add, Origin(), base, scaledOffset);
+    MemoryValue* loadDouble = root->appendNew<MemoryValue>(proc, Load, Int64, Origin(), address);
+    Value* cast = root->appendNew<Value>(proc, BitwiseCast, Origin(), loadDouble);
+    root->appendNew<ControlValue>(proc, Return, Origin(), cast);
+
+    CHECK(isIdentical(compileAndRun<double>(proc, &value, 0), bitwise_cast<double>(value)));
 }
 
 void testFloatImmToInt32BitwiseCast(float value)
@@ -4885,6 +5096,290 @@ void testBranchEqualEqual1()
     CHECK(invoke<int>(*code, 0) == 0);
 }
 
+void testBranchEqualOrUnorderedArgs(double a, double b)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    Value* argumentA = root->appendNew<ArgumentRegValue>(proc, Origin(), FPRInfo::argumentFPR0);
+    Value* argumentB = root->appendNew<ArgumentRegValue>(proc, Origin(), FPRInfo::argumentFPR1);
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        root->appendNew<Value>(
+            proc, EqualOrUnordered, Origin(),
+            argumentA,
+            argumentB),
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 42));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), -13));
+
+    int64_t expected = (std::isunordered(a, b) || a == b) ? 42 : -13;
+    CHECK(compileAndRun<int64_t>(proc, a, b) == expected);
+}
+
+void testBranchEqualOrUnorderedArgs(float a, float b)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    Value* argumentA = root->appendNew<MemoryValue>(proc, Load, Float, Origin(),
+        root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0));
+    Value* argumentB = root->appendNew<MemoryValue>(proc, Load, Float, Origin(),
+        root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR1));
+
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        root->appendNew<Value>(
+            proc, EqualOrUnordered, Origin(),
+            argumentA,
+            argumentB),
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 42));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), -13));
+
+    int64_t expected = (std::isunordered(a, b) || a == b) ? 42 : -13;
+    CHECK(compileAndRun<int64_t>(proc, &a, &b) == expected);
+}
+
+void testBranchNotEqualAndOrderedArgs(double a, double b)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    Value* argumentA = root->appendNew<ArgumentRegValue>(proc, Origin(), FPRInfo::argumentFPR0);
+    Value* argumentB = root->appendNew<ArgumentRegValue>(proc, Origin(), FPRInfo::argumentFPR1);
+    Value* equalOrUnordered = root->appendNew<Value>(
+        proc, EqualOrUnordered, Origin(),
+        argumentA,
+        argumentB);
+    Value* notEqualAndOrdered = root->appendNew<Value>(
+        proc, Equal, Origin(),
+        root->appendNew<Const32Value>(proc, Origin(), 0),
+        equalOrUnordered);
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        notEqualAndOrdered,
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 42));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), -13));
+
+    int64_t expected = (!std::isunordered(a, b) && a != b) ? 42 : -13;
+    CHECK(compileAndRun<int64_t>(proc, a, b) == expected);
+}
+
+void testBranchNotEqualAndOrderedArgs(float a, float b)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    Value* argumentA = root->appendNew<MemoryValue>(proc, Load, Float, Origin(),
+        root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0));
+    Value* argumentB = root->appendNew<MemoryValue>(proc, Load, Float, Origin(),
+        root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR1));
+    Value* equalOrUnordered = root->appendNew<Value>(
+        proc, EqualOrUnordered, Origin(),
+        argumentA,
+        argumentB);
+    Value* notEqualAndOrdered = root->appendNew<Value>(
+        proc, Equal, Origin(),
+        root->appendNew<Const32Value>(proc, Origin(), 0),
+        equalOrUnordered);
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        notEqualAndOrdered,
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 42));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), -13));
+
+    int64_t expected = (!std::isunordered(a, b) && a != b) ? 42 : -13;
+    CHECK(compileAndRun<int64_t>(proc, &a, &b) == expected);
+}
+
+void testBranchEqualOrUnorderedDoubleArgImm(double a, double b)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    Value* argumentA = root->appendNew<ArgumentRegValue>(proc, Origin(), FPRInfo::argumentFPR0);
+    Value* argumentB = root->appendNew<ConstDoubleValue>(proc, Origin(), b);
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        root->appendNew<Value>(
+            proc, EqualOrUnordered, Origin(),
+            argumentA,
+            argumentB),
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 42));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), -13));
+
+    int64_t expected = (std::isunordered(a, b) || a == b) ? 42 : -13;
+    CHECK(compileAndRun<int64_t>(proc, a) == expected);
+}
+
+void testBranchEqualOrUnorderedFloatArgImm(float a, float b)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    Value* argumentA = root->appendNew<MemoryValue>(proc, Load, Float, Origin(),
+        root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0));
+    Value* argumentB = root->appendNew<ConstFloatValue>(proc, Origin(), b);
+
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        root->appendNew<Value>(
+            proc, EqualOrUnordered, Origin(),
+            argumentA,
+            argumentB),
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 42));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), -13));
+
+    int64_t expected = (std::isunordered(a, b) || a == b) ? 42 : -13;
+    CHECK(compileAndRun<int64_t>(proc, &a) == expected);
+}
+
+void testBranchEqualOrUnorderedDoubleImms(double a, double b)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    Value* argumentA = root->appendNew<ConstDoubleValue>(proc, Origin(), a);
+    Value* argumentB = root->appendNew<ConstDoubleValue>(proc, Origin(), b);
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        root->appendNew<Value>(
+            proc, EqualOrUnordered, Origin(),
+            argumentA,
+            argumentB),
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 42));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), -13));
+
+    int64_t expected = (std::isunordered(a, b) || a == b) ? 42 : -13;
+    CHECK(compileAndRun<int64_t>(proc) == expected);
+}
+
+void testBranchEqualOrUnorderedFloatImms(float a, float b)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    Value* argumentA = root->appendNew<ConstFloatValue>(proc, Origin(), a);
+    Value* argumentB = root->appendNew<ConstFloatValue>(proc, Origin(), b);
+
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        root->appendNew<Value>(
+            proc, EqualOrUnordered, Origin(),
+            argumentA,
+            argumentB),
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 42));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), -13));
+
+    int64_t expected = (std::isunordered(a, b) || a == b) ? 42 : -13;
+    CHECK(compileAndRun<int64_t>(proc) == expected);
+}
+
+void testBranchEqualOrUnorderedFloatWithUselessDoubleConversion(float a, float b)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    Value* argument1 = root->appendNew<MemoryValue>(proc, Load, Float, Origin(),
+        root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0));
+    Value* argument2 = root->appendNew<MemoryValue>(proc, Load, Float, Origin(),
+        root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR1));
+    Value* argument1AsDouble = root->appendNew<Value>(proc, FloatToDouble, Origin(), argument1);
+    Value* argument2AsDouble = root->appendNew<Value>(proc, FloatToDouble, Origin(), argument2);
+
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        root->appendNew<Value>(
+            proc, EqualOrUnordered, Origin(),
+            argument1AsDouble,
+            argument2AsDouble),
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 42));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), -13));
+
+    int64_t expected = (std::isunordered(a, b) || a == b) ? 42 : -13;
+    CHECK(compileAndRun<int64_t>(proc, &a, &b) == expected);
+}
+
 void testBranchFold(int value)
 {
     Procedure proc;
@@ -4987,6 +5482,186 @@ void testBranchEqualFoldPtr(intptr_t value)
         elseCase->appendNew<Const32Value>(proc, Origin(), 0));
 
     CHECK(compileAndRun<int>(proc) == !value);
+}
+
+void testBranchLoadPtr()
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        root->appendNew<MemoryValue>(
+            proc, Load, pointerType(), Origin(),
+            root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0)),
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 1));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), 0));
+
+    auto code = compile(proc);
+    intptr_t cond;
+    cond = 42;
+    CHECK(invoke<int>(*code, &cond) == 1);
+    cond = 0;
+    CHECK(invoke<int>(*code, &cond) == 0);
+}
+
+void testBranchLoad32()
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        root->appendNew<MemoryValue>(
+            proc, Load, Int32, Origin(),
+            root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0)),
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 1));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), 0));
+
+    auto code = compile(proc);
+    int32_t cond;
+    cond = 42;
+    CHECK(invoke<int>(*code, &cond) == 1);
+    cond = 0;
+    CHECK(invoke<int>(*code, &cond) == 0);
+}
+
+void testBranchLoad8S()
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        root->appendNew<MemoryValue>(
+            proc, Load8S, Origin(),
+            root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0)),
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 1));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), 0));
+
+    auto code = compile(proc);
+    int8_t cond;
+    cond = -1;
+    CHECK(invoke<int>(*code, &cond) == 1);
+    cond = 0;
+    CHECK(invoke<int>(*code, &cond) == 0);
+}
+
+void testBranchLoad8Z()
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        root->appendNew<MemoryValue>(
+            proc, Load8Z, Origin(),
+            root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0)),
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 1));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), 0));
+
+    auto code = compile(proc);
+    uint8_t cond;
+    cond = 1;
+    CHECK(invoke<int>(*code, &cond) == 1);
+    cond = 0;
+    CHECK(invoke<int>(*code, &cond) == 0);
+}
+
+void testBranchLoad16S()
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        root->appendNew<MemoryValue>(
+            proc, Load16S, Origin(),
+            root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0)),
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 1));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), 0));
+
+    auto code = compile(proc);
+    int16_t cond;
+    cond = -1;
+    CHECK(invoke<int>(*code, &cond) == 1);
+    cond = 0;
+    CHECK(invoke<int>(*code, &cond) == 0);
+}
+
+void testBranchLoad16Z()
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(),
+        root->appendNew<MemoryValue>(
+            proc, Load16Z, Origin(),
+            root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0)),
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        thenCase->appendNew<Const32Value>(proc, Origin(), 1));
+
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        elseCase->appendNew<Const32Value>(proc, Origin(), 0));
+
+    auto code = compile(proc);
+    uint16_t cond;
+    cond = 1;
+    CHECK(invoke<int>(*code, &cond) == 1);
+    cond = 0;
+    CHECK(invoke<int>(*code, &cond) == 0);
 }
 
 void testComplex(unsigned numVars, unsigned numConstructs)
@@ -5589,7 +6264,7 @@ void testSimpleCheck()
     check->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 1);
+            CHECK(!params.size());
 
             // This should always work because a function this simple should never have callee
             // saves.
@@ -5621,7 +6296,7 @@ void testCheckLessThan()
     check->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 1);
+            CHECK(!params.size());
 
             // This should always work because a function this simple should never have callee
             // saves.
@@ -5667,7 +6342,7 @@ void testCheckMegaCombo()
     check->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 1);
+            CHECK(!params.size());
 
             // This should always work because a function this simple should never have callee
             // saves.
@@ -5693,6 +6368,218 @@ void testCheckMegaCombo()
     CHECK(invoke<int>(*code, &value - 2, 1) == 42);
 }
 
+void testCheckTrickyMegaCombo()
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* base = root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0);
+    Value* index = root->appendNew<Value>(
+        proc, ZExt32, Origin(),
+        root->appendNew<Value>(
+            proc, Add, Origin(),
+            root->appendNew<Value>(
+                proc, Trunc, Origin(),
+                root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR1)),
+            root->appendNew<Const32Value>(proc, Origin(), 1)));
+
+    Value* ptr = root->appendNew<Value>(
+        proc, Add, Origin(), base,
+        root->appendNew<Value>(
+            proc, Shl, Origin(), index,
+            root->appendNew<Const32Value>(proc, Origin(), 1)));
+    
+    CheckValue* check = root->appendNew<CheckValue>(
+        proc, Check, Origin(),
+        root->appendNew<Value>(
+            proc, LessThan, Origin(),
+            root->appendNew<MemoryValue>(proc, Load8S, Origin(), ptr),
+            root->appendNew<Const32Value>(proc, Origin(), 42)));
+    check->setGenerator(
+        [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
+            AllowMacroScratchRegisterUsage allowScratch(jit);
+            CHECK(!params.size());
+
+            // This should always work because a function this simple should never have callee
+            // saves.
+            jit.move(CCallHelpers::TrustedImm32(42), GPRInfo::returnValueGPR);
+            jit.emitFunctionEpilogue();
+            jit.ret();
+        });
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(), root->appendNew<Const32Value>(proc, Origin(), 0));
+
+    auto code = compile(proc);
+
+    int8_t value;
+    value = 42;
+    CHECK(invoke<int>(*code, &value - 2, 0) == 0);
+    value = 127;
+    CHECK(invoke<int>(*code, &value - 2, 0) == 0);
+    value = 41;
+    CHECK(invoke<int>(*code, &value - 2, 0) == 42);
+    value = 0;
+    CHECK(invoke<int>(*code, &value - 2, 0) == 42);
+    value = -1;
+    CHECK(invoke<int>(*code, &value - 2, 0) == 42);
+}
+
+void testCheckTwoMegaCombos()
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    Value* base = root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0);
+    Value* index = root->appendNew<Value>(
+        proc, ZExt32, Origin(),
+        root->appendNew<Value>(
+            proc, Trunc, Origin(),
+            root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR1)));
+
+    Value* ptr = root->appendNew<Value>(
+        proc, Add, Origin(), base,
+        root->appendNew<Value>(
+            proc, Shl, Origin(), index,
+            root->appendNew<Const32Value>(proc, Origin(), 1)));
+
+    Value* predicate = root->appendNew<Value>(
+        proc, LessThan, Origin(),
+        root->appendNew<MemoryValue>(proc, Load8S, Origin(), ptr),
+        root->appendNew<Const32Value>(proc, Origin(), 42));
+    
+    CheckValue* check = root->appendNew<CheckValue>(proc, Check, Origin(), predicate);
+    check->setGenerator(
+        [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
+            AllowMacroScratchRegisterUsage allowScratch(jit);
+            CHECK(!params.size());
+
+            // This should always work because a function this simple should never have callee
+            // saves.
+            jit.move(CCallHelpers::TrustedImm32(42), GPRInfo::returnValueGPR);
+            jit.emitFunctionEpilogue();
+            jit.ret();
+        });
+    CheckValue* check2 = root->appendNew<CheckValue>(proc, Check, Origin(), predicate);
+    check2->setGenerator(
+        [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
+            AllowMacroScratchRegisterUsage allowScratch(jit);
+            CHECK(!params.size());
+
+            // This should always work because a function this simple should never have callee
+            // saves.
+            jit.move(CCallHelpers::TrustedImm32(43), GPRInfo::returnValueGPR);
+            jit.emitFunctionEpilogue();
+            jit.ret();
+        });
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(), root->appendNew<Const32Value>(proc, Origin(), 0));
+
+    auto code = compile(proc);
+
+    int8_t value;
+    value = 42;
+    CHECK(invoke<int>(*code, &value - 2, 1) == 0);
+    value = 127;
+    CHECK(invoke<int>(*code, &value - 2, 1) == 0);
+    value = 41;
+    CHECK(invoke<int>(*code, &value - 2, 1) == 42);
+    value = 0;
+    CHECK(invoke<int>(*code, &value - 2, 1) == 42);
+    value = -1;
+    CHECK(invoke<int>(*code, &value - 2, 1) == 42);
+}
+
+void testCheckTwoNonRedundantMegaCombos()
+{
+    Procedure proc;
+    
+    BasicBlock* root = proc.addBlock();
+    BasicBlock* thenCase = proc.addBlock();
+    BasicBlock* elseCase = proc.addBlock();
+    
+    Value* base = root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0);
+    Value* index = root->appendNew<Value>(
+        proc, ZExt32, Origin(),
+        root->appendNew<Value>(
+            proc, Trunc, Origin(),
+            root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR1)));
+    Value* branchPredicate = root->appendNew<Value>(
+        proc, BitAnd, Origin(),
+        root->appendNew<Value>(
+            proc, Trunc, Origin(),
+            root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR2)),
+        root->appendNew<Const32Value>(proc, Origin(), 0xff));
+
+    Value* ptr = root->appendNew<Value>(
+        proc, Add, Origin(), base,
+        root->appendNew<Value>(
+            proc, Shl, Origin(), index,
+            root->appendNew<Const32Value>(proc, Origin(), 1)));
+
+    Value* checkPredicate = root->appendNew<Value>(
+        proc, LessThan, Origin(),
+        root->appendNew<MemoryValue>(proc, Load8S, Origin(), ptr),
+        root->appendNew<Const32Value>(proc, Origin(), 42));
+
+    root->appendNew<ControlValue>(
+        proc, Branch, Origin(), branchPredicate,
+        FrequentedBlock(thenCase), FrequentedBlock(elseCase));
+    
+    CheckValue* check = thenCase->appendNew<CheckValue>(proc, Check, Origin(), checkPredicate);
+    check->setGenerator(
+        [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
+            AllowMacroScratchRegisterUsage allowScratch(jit);
+            CHECK(!params.size());
+
+            // This should always work because a function this simple should never have callee
+            // saves.
+            jit.move(CCallHelpers::TrustedImm32(42), GPRInfo::returnValueGPR);
+            jit.emitFunctionEpilogue();
+            jit.ret();
+        });
+    thenCase->appendNew<ControlValue>(
+        proc, Return, Origin(), thenCase->appendNew<Const32Value>(proc, Origin(), 43));
+
+    CheckValue* check2 = elseCase->appendNew<CheckValue>(proc, Check, Origin(), checkPredicate);
+    check2->setGenerator(
+        [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
+            AllowMacroScratchRegisterUsage allowScratch(jit);
+            CHECK(!params.size());
+
+            // This should always work because a function this simple should never have callee
+            // saves.
+            jit.move(CCallHelpers::TrustedImm32(44), GPRInfo::returnValueGPR);
+            jit.emitFunctionEpilogue();
+            jit.ret();
+        });
+    elseCase->appendNew<ControlValue>(
+        proc, Return, Origin(), elseCase->appendNew<Const32Value>(proc, Origin(), 45));
+
+    auto code = compile(proc);
+
+    int8_t value;
+
+    value = 42;
+    CHECK(invoke<int>(*code, &value - 2, 1, true) == 43);
+    value = 127;
+    CHECK(invoke<int>(*code, &value - 2, 1, true) == 43);
+    value = 41;
+    CHECK(invoke<int>(*code, &value - 2, 1, true) == 42);
+    value = 0;
+    CHECK(invoke<int>(*code, &value - 2, 1, true) == 42);
+    value = -1;
+    CHECK(invoke<int>(*code, &value - 2, 1, true) == 42);
+
+    value = 42;
+    CHECK(invoke<int>(*code, &value - 2, 1, false) == 45);
+    value = 127;
+    CHECK(invoke<int>(*code, &value - 2, 1, false) == 45);
+    value = 41;
+    CHECK(invoke<int>(*code, &value - 2, 1, false) == 44);
+    value = 0;
+    CHECK(invoke<int>(*code, &value - 2, 1, false) == 44);
+    value = -1;
+    CHECK(invoke<int>(*code, &value - 2, 1, false) == 44);
+}
+
 void testCheckAddImm()
 {
     Procedure proc;
@@ -5707,11 +6594,11 @@ void testCheckAddImm()
     checkAdd->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 4);
-            CHECK(params[2].isGPR());
-            CHECK(params[3].isConstant());
-            CHECK(params[3].value() == 42);
-            jit.convertInt32ToDouble(params[2].gpr(), FPRInfo::fpRegT0);
+            CHECK(params.size() == 2);
+            CHECK(params[0].isGPR());
+            CHECK(params[1].isConstant());
+            CHECK(params[1].value() == 42);
+            jit.convertInt32ToDouble(params[0].gpr(), FPRInfo::fpRegT0);
             jit.convertInt32ToDouble(CCallHelpers::TrustedImm32(42), FPRInfo::fpRegT1);
             jit.addDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
@@ -5743,11 +6630,11 @@ void testCheckAddImmCommute()
     checkAdd->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 4);
-            CHECK(params[2].isGPR());
-            CHECK(params[3].isConstant());
-            CHECK(params[3].value() == 42);
-            jit.convertInt32ToDouble(params[2].gpr(), FPRInfo::fpRegT0);
+            CHECK(params.size() == 2);
+            CHECK(params[0].isGPR());
+            CHECK(params[1].isConstant());
+            CHECK(params[1].value() == 42);
+            jit.convertInt32ToDouble(params[0].gpr(), FPRInfo::fpRegT0);
             jit.convertInt32ToDouble(CCallHelpers::TrustedImm32(42), FPRInfo::fpRegT1);
             jit.addDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
@@ -5779,11 +6666,11 @@ void testCheckAddImmSomeRegister()
     checkAdd->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 4);
-            CHECK(params[2].isGPR());
-            CHECK(params[3].isGPR());
-            jit.convertInt32ToDouble(params[2].gpr(), FPRInfo::fpRegT0);
-            jit.convertInt32ToDouble(params[3].gpr(), FPRInfo::fpRegT1);
+            CHECK(params.size() == 2);
+            CHECK(params[0].isGPR());
+            CHECK(params[1].isGPR());
+            jit.convertInt32ToDouble(params[0].gpr(), FPRInfo::fpRegT0);
+            jit.convertInt32ToDouble(params[1].gpr(), FPRInfo::fpRegT1);
             jit.addDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
             jit.ret();
@@ -5816,11 +6703,11 @@ void testCheckAdd()
     checkAdd->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 4);
-            CHECK(params[2].isGPR());
-            CHECK(params[3].isGPR());
-            jit.convertInt32ToDouble(params[2].gpr(), FPRInfo::fpRegT0);
-            jit.convertInt32ToDouble(params[3].gpr(), FPRInfo::fpRegT1);
+            CHECK(params.size() == 2);
+            CHECK(params[0].isGPR());
+            CHECK(params[1].isGPR());
+            jit.convertInt32ToDouble(params[0].gpr(), FPRInfo::fpRegT0);
+            jit.convertInt32ToDouble(params[1].gpr(), FPRInfo::fpRegT1);
             jit.addDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
             jit.ret();
@@ -5849,11 +6736,11 @@ void testCheckAdd64()
     checkAdd->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 4);
-            CHECK(params[2].isGPR());
-            CHECK(params[3].isGPR());
-            jit.convertInt64ToDouble(params[2].gpr(), FPRInfo::fpRegT0);
-            jit.convertInt64ToDouble(params[3].gpr(), FPRInfo::fpRegT1);
+            CHECK(params.size() == 2);
+            CHECK(params[0].isGPR());
+            CHECK(params[1].isGPR());
+            jit.convertInt64ToDouble(params[0].gpr(), FPRInfo::fpRegT0);
+            jit.convertInt64ToDouble(params[1].gpr(), FPRInfo::fpRegT1);
             jit.addDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
             jit.ret();
@@ -5923,11 +6810,11 @@ void testCheckSubImm()
     checkSub->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 4);
-            CHECK(params[2].isGPR());
-            CHECK(params[3].isConstant());
-            CHECK(params[3].value() == 42);
-            jit.convertInt32ToDouble(params[2].gpr(), FPRInfo::fpRegT0);
+            CHECK(params.size() == 2);
+            CHECK(params[0].isGPR());
+            CHECK(params[1].isConstant());
+            CHECK(params[1].value() == 42);
+            jit.convertInt32ToDouble(params[0].gpr(), FPRInfo::fpRegT0);
             jit.convertInt32ToDouble(CCallHelpers::TrustedImm32(42), FPRInfo::fpRegT1);
             jit.subDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
@@ -5960,11 +6847,11 @@ void testCheckSubBadImm()
     checkSub->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 4);
-            CHECK(params[2].isGPR());
-            CHECK(params[3].isConstant());
-            CHECK(params[3].value() == badImm);
-            jit.convertInt32ToDouble(params[2].gpr(), FPRInfo::fpRegT0);
+            CHECK(params.size() == 2);
+            CHECK(params[0].isGPR());
+            CHECK(params[1].isConstant());
+            CHECK(params[1].value() == badImm);
+            jit.convertInt32ToDouble(params[0].gpr(), FPRInfo::fpRegT0);
             jit.convertInt32ToDouble(CCallHelpers::TrustedImm32(badImm), FPRInfo::fpRegT1);
             jit.subDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
@@ -5998,11 +6885,11 @@ void testCheckSub()
     checkSub->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 4);
-            CHECK(params[2].isGPR());
-            CHECK(params[3].isGPR());
-            jit.convertInt32ToDouble(params[2].gpr(), FPRInfo::fpRegT0);
-            jit.convertInt32ToDouble(params[3].gpr(), FPRInfo::fpRegT1);
+            CHECK(params.size() == 2);
+            CHECK(params[0].isGPR());
+            CHECK(params[1].isGPR());
+            jit.convertInt32ToDouble(params[0].gpr(), FPRInfo::fpRegT0);
+            jit.convertInt32ToDouble(params[1].gpr(), FPRInfo::fpRegT1);
             jit.subDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
             jit.ret();
@@ -6036,11 +6923,11 @@ void testCheckSub64()
     checkSub->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 4);
-            CHECK(params[2].isGPR());
-            CHECK(params[3].isGPR());
-            jit.convertInt64ToDouble(params[2].gpr(), FPRInfo::fpRegT0);
-            jit.convertInt64ToDouble(params[3].gpr(), FPRInfo::fpRegT1);
+            CHECK(params.size() == 2);
+            CHECK(params[0].isGPR());
+            CHECK(params[1].isGPR());
+            jit.convertInt64ToDouble(params[0].gpr(), FPRInfo::fpRegT0);
+            jit.convertInt64ToDouble(params[1].gpr(), FPRInfo::fpRegT1);
             jit.subDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
             jit.ret();
@@ -6109,9 +6996,9 @@ void testCheckNeg()
     checkNeg->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 3);
-            CHECK(params[2].isGPR());
-            jit.convertInt32ToDouble(params[2].gpr(), FPRInfo::fpRegT1);
+            CHECK(params.size() == 1);
+            CHECK(params[0].isGPR());
+            jit.convertInt32ToDouble(params[0].gpr(), FPRInfo::fpRegT1);
             jit.negateDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
             jit.ret();
@@ -6139,9 +7026,9 @@ void testCheckNeg64()
     checkNeg->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 3);
-            CHECK(params[2].isGPR());
-            jit.convertInt64ToDouble(params[2].gpr(), FPRInfo::fpRegT1);
+            CHECK(params.size() == 1);
+            CHECK(params[0].isGPR());
+            jit.convertInt64ToDouble(params[0].gpr(), FPRInfo::fpRegT1);
             jit.negateDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
             jit.ret();
@@ -6174,11 +7061,11 @@ void testCheckMul()
     checkMul->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 4);
-            CHECK(params[2].isGPR());
-            CHECK(params[3].isGPR());
-            jit.convertInt32ToDouble(params[2].gpr(), FPRInfo::fpRegT0);
-            jit.convertInt32ToDouble(params[3].gpr(), FPRInfo::fpRegT1);
+            CHECK(params.size() == 2);
+            CHECK(params[0].isGPR());
+            CHECK(params[1].isGPR());
+            jit.convertInt32ToDouble(params[0].gpr(), FPRInfo::fpRegT0);
+            jit.convertInt32ToDouble(params[1].gpr(), FPRInfo::fpRegT1);
             jit.mulDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
             jit.ret();
@@ -6215,11 +7102,11 @@ void testCheckMulMemory()
     checkMul->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 4);
-            CHECK(params[2].isGPR());
-            CHECK(params[3].isGPR());
-            jit.convertInt32ToDouble(params[2].gpr(), FPRInfo::fpRegT0);
-            jit.convertInt32ToDouble(params[3].gpr(), FPRInfo::fpRegT1);
+            CHECK(params.size() == 2);
+            CHECK(params[0].isGPR());
+            CHECK(params[1].isGPR());
+            jit.convertInt32ToDouble(params[0].gpr(), FPRInfo::fpRegT0);
+            jit.convertInt32ToDouble(params[1].gpr(), FPRInfo::fpRegT1);
             jit.mulDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
             jit.ret();
@@ -6261,11 +7148,11 @@ void testCheckMul2()
     checkMul->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 4);
-            CHECK(params[2].isGPR());
-            CHECK(params[3].isConstant());
-            CHECK(params[3].value() == 2);
-            jit.convertInt32ToDouble(params[2].gpr(), FPRInfo::fpRegT0);
+            CHECK(params.size() == 2);
+            CHECK(params[0].isGPR());
+            CHECK(params[1].isConstant());
+            CHECK(params[1].value() == 2);
+            jit.convertInt32ToDouble(params[0].gpr(), FPRInfo::fpRegT0);
             jit.convertInt32ToDouble(CCallHelpers::TrustedImm32(2), FPRInfo::fpRegT1);
             jit.mulDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
@@ -6295,11 +7182,11 @@ void testCheckMul64()
     checkMul->setGenerator(
         [&] (CCallHelpers& jit, const StackmapGenerationParams& params) {
             AllowMacroScratchRegisterUsage allowScratch(jit);
-            CHECK(params.size() == 4);
-            CHECK(params[2].isGPR());
-            CHECK(params[3].isGPR());
-            jit.convertInt64ToDouble(params[2].gpr(), FPRInfo::fpRegT0);
-            jit.convertInt64ToDouble(params[3].gpr(), FPRInfo::fpRegT1);
+            CHECK(params.size() == 2);
+            CHECK(params[0].isGPR());
+            CHECK(params[1].isGPR());
+            jit.convertInt64ToDouble(params[0].gpr(), FPRInfo::fpRegT0);
+            jit.convertInt64ToDouble(params[1].gpr(), FPRInfo::fpRegT1);
             jit.mulDouble(FPRInfo::fpRegT1, FPRInfo::fpRegT0);
             jit.emitFunctionEpilogue();
             jit.ret();
@@ -6621,6 +7508,20 @@ void testCompare(B3::Opcode opcode, int left, int right)
     variants(-left, right);
     variants(left, -right);
     variants(-left, -right);
+}
+
+void testEqualDouble(double left, double right, bool result)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, Equal, Origin(),
+            root->appendNew<ArgumentRegValue>(proc, Origin(), FPRInfo::argumentFPR0),
+            root->appendNew<ArgumentRegValue>(proc, Origin(), FPRInfo::argumentFPR1)));
+
+    CHECK(compileAndRun<bool>(proc, left, right) == result);
 }
 
 int simpleFunction(int a, int b)
@@ -7270,6 +8171,238 @@ void testTruncSExt32(int32_t value)
     CHECK(compileAndRun<int32_t>(proc, value) == value);
 }
 
+void testSExt8(int32_t value)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, SExt8, Origin(),
+            root->appendNew<Value>(
+                proc, Trunc, Origin(),
+                root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0))));
+
+    CHECK(compileAndRun<int32_t>(proc, value) == static_cast<int32_t>(static_cast<int8_t>(value)));
+}
+
+void testSExt8Fold(int32_t value)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, SExt8, Origin(),
+            root->appendNew<Const32Value>(proc, Origin(), value)));
+
+    CHECK(compileAndRun<int32_t>(proc) == static_cast<int32_t>(static_cast<int8_t>(value)));
+}
+
+void testSExt8SExt8(int32_t value)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, SExt8, Origin(),
+            root->appendNew<Value>(
+                proc, SExt8, Origin(),
+                root->appendNew<Value>(
+                    proc, Trunc, Origin(),
+                    root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0)))));
+
+    CHECK(compileAndRun<int32_t>(proc, value) == static_cast<int32_t>(static_cast<int8_t>(value)));
+}
+
+void testSExt8SExt16(int32_t value)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, SExt8, Origin(),
+            root->appendNew<Value>(
+                proc, SExt16, Origin(),
+                root->appendNew<Value>(
+                    proc, Trunc, Origin(),
+                    root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0)))));
+
+    CHECK(compileAndRun<int32_t>(proc, value) == static_cast<int32_t>(static_cast<int8_t>(value)));
+}
+
+void testSExt8BitAnd(int32_t value, int32_t mask)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, SExt8, Origin(),
+            root->appendNew<Value>(
+                proc, BitAnd, Origin(),
+                root->appendNew<Value>(
+                    proc, Trunc, Origin(),
+                    root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0)),
+                root->appendNew<Const32Value>(proc, Origin(), mask))));
+
+    CHECK(compileAndRun<int32_t>(proc, value) == static_cast<int32_t>(static_cast<int8_t>(value & mask)));
+}
+
+void testBitAndSExt8(int32_t value, int32_t mask)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, BitAnd, Origin(),
+            root->appendNew<Value>(
+                proc, SExt8, Origin(),
+                root->appendNew<Value>(
+                    proc, Trunc, Origin(),
+                    root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0))),
+            root->appendNew<Const32Value>(proc, Origin(), mask)));
+
+    CHECK(compileAndRun<int32_t>(proc, value) == (static_cast<int32_t>(static_cast<int8_t>(value)) & mask));
+}
+
+void testSExt16(int32_t value)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, SExt16, Origin(),
+            root->appendNew<Value>(
+                proc, Trunc, Origin(),
+                root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0))));
+
+    CHECK(compileAndRun<int32_t>(proc, value) == static_cast<int32_t>(static_cast<int16_t>(value)));
+}
+
+void testSExt16Fold(int32_t value)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, SExt16, Origin(),
+            root->appendNew<Const32Value>(proc, Origin(), value)));
+
+    CHECK(compileAndRun<int32_t>(proc) == static_cast<int32_t>(static_cast<int16_t>(value)));
+}
+
+void testSExt16SExt16(int32_t value)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, SExt16, Origin(),
+            root->appendNew<Value>(
+                proc, SExt16, Origin(),
+                root->appendNew<Value>(
+                    proc, Trunc, Origin(),
+                    root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0)))));
+
+    CHECK(compileAndRun<int32_t>(proc, value) == static_cast<int32_t>(static_cast<int16_t>(value)));
+}
+
+void testSExt16SExt8(int32_t value)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, SExt16, Origin(),
+            root->appendNew<Value>(
+                proc, SExt8, Origin(),
+                root->appendNew<Value>(
+                    proc, Trunc, Origin(),
+                    root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0)))));
+
+    CHECK(compileAndRun<int32_t>(proc, value) == static_cast<int32_t>(static_cast<int8_t>(value)));
+}
+
+void testSExt16BitAnd(int32_t value, int32_t mask)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, SExt16, Origin(),
+            root->appendNew<Value>(
+                proc, BitAnd, Origin(),
+                root->appendNew<Value>(
+                    proc, Trunc, Origin(),
+                    root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0)),
+                root->appendNew<Const32Value>(proc, Origin(), mask))));
+
+    CHECK(compileAndRun<int32_t>(proc, value) == static_cast<int32_t>(static_cast<int16_t>(value & mask)));
+}
+
+void testBitAndSExt16(int32_t value, int32_t mask)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, BitAnd, Origin(),
+            root->appendNew<Value>(
+                proc, SExt16, Origin(),
+                root->appendNew<Value>(
+                    proc, Trunc, Origin(),
+                    root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0))),
+            root->appendNew<Const32Value>(proc, Origin(), mask)));
+
+    CHECK(compileAndRun<int32_t>(proc, value) == (static_cast<int32_t>(static_cast<int16_t>(value)) & mask));
+}
+
+void testSExt32BitAnd(int32_t value, int32_t mask)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, SExt32, Origin(),
+            root->appendNew<Value>(
+                proc, BitAnd, Origin(),
+                root->appendNew<Value>(
+                    proc, Trunc, Origin(),
+                    root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0)),
+                root->appendNew<Const32Value>(proc, Origin(), mask))));
+
+    CHECK(compileAndRun<int64_t>(proc, value) == static_cast<int64_t>(value & mask));
+}
+
+void testBitAndSExt32(int32_t value, int64_t mask)
+{
+    Procedure proc;
+    BasicBlock* root = proc.addBlock();
+    root->appendNew<ControlValue>(
+        proc, Return, Origin(),
+        root->appendNew<Value>(
+            proc, BitAnd, Origin(),
+            root->appendNew<Value>(
+                proc, SExt32, Origin(),
+                root->appendNew<Value>(
+                    proc, Trunc, Origin(),
+                    root->appendNew<ArgumentRegValue>(proc, Origin(), GPRInfo::argumentGPR0))),
+            root->appendNew<Const64Value>(proc, Origin(), mask)));
+
+    CHECK(compileAndRun<int64_t>(proc, value) == (static_cast<int64_t>(value) & mask));
+}
+
 void testBasicSelect()
 {
     Procedure proc;
@@ -7611,6 +8744,12 @@ void populateWithInterestingValues(Vector<Operand<FloatType>>& operands)
 {
     operands.append({ "0.", static_cast<FloatType>(0.) });
     operands.append({ "-0.", static_cast<FloatType>(-0.) });
+    operands.append({ "0.4", static_cast<FloatType>(0.5) });
+    operands.append({ "-0.4", static_cast<FloatType>(-0.5) });
+    operands.append({ "0.5", static_cast<FloatType>(0.5) });
+    operands.append({ "-0.5", static_cast<FloatType>(-0.5) });
+    operands.append({ "0.6", static_cast<FloatType>(0.5) });
+    operands.append({ "-0.6", static_cast<FloatType>(-0.5) });
     operands.append({ "1.", static_cast<FloatType>(1.) });
     operands.append({ "-1.", static_cast<FloatType>(-1.) });
     operands.append({ "2.", static_cast<FloatType>(2.) });
@@ -7937,6 +9076,12 @@ void run(const char* filter)
     RUN(testBitAndArgImm(43, 0));
     RUN(testBitAndArgImm(10, 3));
     RUN(testBitAndArgImm(42, 0xffffffffffffffff));
+    RUN(testBitAndArgImm(42, 0xff));
+    RUN(testBitAndArgImm(300, 0xff));
+    RUN(testBitAndArgImm(-300, 0xff));
+    RUN(testBitAndArgImm(42, 0xffff));
+    RUN(testBitAndArgImm(40000, 0xffff));
+    RUN(testBitAndArgImm(-40000, 0xffff));
     RUN(testBitAndImmArg(43, 43));
     RUN(testBitAndImmArg(43, 0));
     RUN(testBitAndImmArg(10, 3));
@@ -7967,6 +9112,12 @@ void run(const char* filter)
     RUN(testBitAndImmArg32(43, 0));
     RUN(testBitAndImmArg32(10, 3));
     RUN(testBitAndImmArg32(42, 0xffffffff));
+    RUN(testBitAndImmArg32(42, 0xff));
+    RUN(testBitAndImmArg32(300, 0xff));
+    RUN(testBitAndImmArg32(-300, 0xff));
+    RUN(testBitAndImmArg32(42, 0xffff));
+    RUN(testBitAndImmArg32(40000, 0xffff));
+    RUN(testBitAndImmArg32(-40000, 0xffff));
     RUN(testBitAndBitAndArgImmImm32(2, 7, 3));
     RUN(testBitAndBitAndArgImmImm32(1, 6, 6));
     RUN(testBitAndBitAndArgImmImm32(0xffff, 24, 7));
@@ -8229,6 +9380,19 @@ void run(const char* filter)
     RUN_UNARY(testAbsArgWithUselessDoubleConversion, floatingPointOperands<float>());
     RUN_UNARY(testAbsArgWithEffectfulDoubleConversion, floatingPointOperands<float>());
 
+    RUN_UNARY(testCeilArg, floatingPointOperands<double>());
+    RUN_UNARY(testCeilImm, floatingPointOperands<double>());
+    RUN_UNARY(testCeilMem, floatingPointOperands<double>());
+    RUN_UNARY(testCeilCeilArg, floatingPointOperands<double>());
+    RUN_UNARY(testCeilIToD64, int64Operands());
+    RUN_UNARY(testCeilIToD32, int32Operands());
+    RUN_UNARY(testCeilArg, floatingPointOperands<float>());
+    RUN_UNARY(testCeilImm, floatingPointOperands<float>());
+    RUN_UNARY(testCeilMem, floatingPointOperands<float>());
+    RUN_UNARY(testCeilCeilArg, floatingPointOperands<float>());
+    RUN_UNARY(testCeilArgWithUselessDoubleConversion, floatingPointOperands<float>());
+    RUN_UNARY(testCeilArgWithEffectfulDoubleConversion, floatingPointOperands<float>());
+
     RUN_UNARY(testSqrtArg, floatingPointOperands<double>());
     RUN_UNARY(testSqrtImm, floatingPointOperands<double>());
     RUN_UNARY(testSqrtMem, floatingPointOperands<double>());
@@ -8242,10 +9406,12 @@ void run(const char* filter)
     RUN_UNARY(testDoubleImmToInt64BitwiseCast, floatingPointOperands<double>());
     RUN_UNARY(testTwoBitwiseCastOnDouble, floatingPointOperands<double>());
     RUN_UNARY(testBitwiseCastOnDoubleInMemory, floatingPointOperands<double>());
+    RUN_UNARY(testBitwiseCastOnDoubleInMemoryIndexed, floatingPointOperands<double>());
     RUN_UNARY(testInt64BArgToDoubleBitwiseCast, int64Operands());
     RUN_UNARY(testInt64BImmToDoubleBitwiseCast, int64Operands());
     RUN_UNARY(testTwoBitwiseCastOnInt64, int64Operands());
     RUN_UNARY(testBitwiseCastOnInt64InMemory, int64Operands());
+    RUN_UNARY(testBitwiseCastOnInt64InMemoryIndexed, int64Operands());
     RUN_UNARY(testFloatImmToInt32BitwiseCast, floatingPointOperands<float>());
     RUN_UNARY(testBitwiseCastOnFloatInMemory, floatingPointOperands<float>());
     RUN_UNARY(testInt32BArgToFloatBitwiseCast, int32Operands());
@@ -8309,6 +9475,17 @@ void run(const char* filter)
     RUN(testBranchEqualEqual());
     RUN(testBranchEqualCommute());
     RUN(testBranchEqualEqual1());
+    RUN_BINARY(testBranchEqualOrUnorderedArgs, floatingPointOperands<double>(), floatingPointOperands<double>());
+    RUN_BINARY(testBranchEqualOrUnorderedArgs, floatingPointOperands<float>(), floatingPointOperands<float>());
+    RUN_BINARY(testBranchNotEqualAndOrderedArgs, floatingPointOperands<double>(), floatingPointOperands<double>());
+    RUN_BINARY(testBranchNotEqualAndOrderedArgs, floatingPointOperands<float>(), floatingPointOperands<float>());
+    RUN_BINARY(testBranchEqualOrUnorderedDoubleArgImm, floatingPointOperands<double>(), floatingPointOperands<double>());
+    RUN_BINARY(testBranchEqualOrUnorderedFloatArgImm, floatingPointOperands<float>(), floatingPointOperands<float>());
+    RUN_BINARY(testBranchEqualOrUnorderedDoubleImms, floatingPointOperands<double>(), floatingPointOperands<double>());
+    RUN_BINARY(testBranchEqualOrUnorderedFloatImms, floatingPointOperands<float>(), floatingPointOperands<float>());
+    RUN_BINARY(testBranchEqualOrUnorderedFloatWithUselessDoubleConversion, floatingPointOperands<float>(), floatingPointOperands<float>());
+    RUN_BINARY(testBranchNotEqualAndOrderedArgs, floatingPointOperands<double>(), floatingPointOperands<double>());
+    RUN_BINARY(testBranchNotEqualAndOrderedArgs, floatingPointOperands<float>(), floatingPointOperands<float>());
     RUN(testBranchFold(42));
     RUN(testBranchFold(0));
     RUN(testDiamondFold(42));
@@ -8317,6 +9494,12 @@ void run(const char* filter)
     RUN(testBranchNotEqualFoldPtr(0));
     RUN(testBranchEqualFoldPtr(42));
     RUN(testBranchEqualFoldPtr(0));
+    RUN(testBranchLoadPtr());
+    RUN(testBranchLoad32());
+    RUN(testBranchLoad8S());
+    RUN(testBranchLoad8Z());
+    RUN(testBranchLoad16S());
+    RUN(testBranchLoad16Z());
 
     RUN(testComplex(64, 128));
     RUN(testComplex(64, 256));
@@ -8346,6 +9529,9 @@ void run(const char* filter)
     RUN(testSimpleCheck());
     RUN(testCheckLessThan());
     RUN(testCheckMegaCombo());
+    RUN(testCheckTrickyMegaCombo());
+    RUN(testCheckTwoMegaCombos());
+    RUN(testCheckTwoNonRedundantMegaCombos());
     RUN(testCheckAddImm());
     RUN(testCheckAddImmCommute());
     RUN(testCheckAddImmSomeRegister());
@@ -8381,6 +9567,13 @@ void run(const char* filter)
 
     RUN(testCompare(BitAnd, 42, 42));
     RUN(testCompare(BitAnd, 42, 0));
+
+    RUN(testEqualDouble(42, 42, true));
+    RUN(testEqualDouble(0, -0, true));
+    RUN(testEqualDouble(42, 43, false));
+    RUN(testEqualDouble(PNaN, 42, false));
+    RUN(testEqualDouble(42, PNaN, false));
+    RUN(testEqualDouble(PNaN, PNaN, false));
 
     RUN(testLoad<Int32>(60));
     RUN(testLoad<Int32>(-60));
@@ -8545,6 +9738,201 @@ void run(const char* filter)
     RUN(testTruncSExt32(1000000000ll));
     RUN(testTruncSExt32(-1000000000ll));
 
+    RUN(testSExt8(0));
+    RUN(testSExt8(1));
+    RUN(testSExt8(42));
+    RUN(testSExt8(-1));
+    RUN(testSExt8(0xff));
+    RUN(testSExt8(0x100));
+    RUN(testSExt8Fold(0));
+    RUN(testSExt8Fold(1));
+    RUN(testSExt8Fold(42));
+    RUN(testSExt8Fold(-1));
+    RUN(testSExt8Fold(0xff));
+    RUN(testSExt8Fold(0x100));
+    RUN(testSExt8SExt8(0));
+    RUN(testSExt8SExt8(1));
+    RUN(testSExt8SExt8(42));
+    RUN(testSExt8SExt8(-1));
+    RUN(testSExt8SExt8(0xff));
+    RUN(testSExt8SExt8(0x100));
+    RUN(testSExt8SExt16(0));
+    RUN(testSExt8SExt16(1));
+    RUN(testSExt8SExt16(42));
+    RUN(testSExt8SExt16(-1));
+    RUN(testSExt8SExt16(0xff));
+    RUN(testSExt8SExt16(0x100));
+    RUN(testSExt8SExt16(0xffff));
+    RUN(testSExt8SExt16(0x10000));
+    RUN(testSExt8BitAnd(0, 0));
+    RUN(testSExt8BitAnd(1, 0));
+    RUN(testSExt8BitAnd(42, 0));
+    RUN(testSExt8BitAnd(-1, 0));
+    RUN(testSExt8BitAnd(0xff, 0));
+    RUN(testSExt8BitAnd(0x100, 0));
+    RUN(testSExt8BitAnd(0xffff, 0));
+    RUN(testSExt8BitAnd(0x10000, 0));
+    RUN(testSExt8BitAnd(0, 0xf));
+    RUN(testSExt8BitAnd(1, 0xf));
+    RUN(testSExt8BitAnd(42, 0xf));
+    RUN(testSExt8BitAnd(-1, 0xf));
+    RUN(testSExt8BitAnd(0xff, 0xf));
+    RUN(testSExt8BitAnd(0x100, 0xf));
+    RUN(testSExt8BitAnd(0xffff, 0xf));
+    RUN(testSExt8BitAnd(0x10000, 0xf));
+    RUN(testSExt8BitAnd(0, 0xff));
+    RUN(testSExt8BitAnd(1, 0xff));
+    RUN(testSExt8BitAnd(42, 0xff));
+    RUN(testSExt8BitAnd(-1, 0xff));
+    RUN(testSExt8BitAnd(0xff, 0xff));
+    RUN(testSExt8BitAnd(0x100, 0xff));
+    RUN(testSExt8BitAnd(0xffff, 0xff));
+    RUN(testSExt8BitAnd(0x10000, 0xff));
+    RUN(testSExt8BitAnd(0, 0x80));
+    RUN(testSExt8BitAnd(1, 0x80));
+    RUN(testSExt8BitAnd(42, 0x80));
+    RUN(testSExt8BitAnd(-1, 0x80));
+    RUN(testSExt8BitAnd(0xff, 0x80));
+    RUN(testSExt8BitAnd(0x100, 0x80));
+    RUN(testSExt8BitAnd(0xffff, 0x80));
+    RUN(testSExt8BitAnd(0x10000, 0x80));
+    RUN(testBitAndSExt8(0, 0xf));
+    RUN(testBitAndSExt8(1, 0xf));
+    RUN(testBitAndSExt8(42, 0xf));
+    RUN(testBitAndSExt8(-1, 0xf));
+    RUN(testBitAndSExt8(0xff, 0xf));
+    RUN(testBitAndSExt8(0x100, 0xf));
+    RUN(testBitAndSExt8(0xffff, 0xf));
+    RUN(testBitAndSExt8(0x10000, 0xf));
+    RUN(testBitAndSExt8(0, 0xff));
+    RUN(testBitAndSExt8(1, 0xff));
+    RUN(testBitAndSExt8(42, 0xff));
+    RUN(testBitAndSExt8(-1, 0xff));
+    RUN(testBitAndSExt8(0xff, 0xff));
+    RUN(testBitAndSExt8(0x100, 0xff));
+    RUN(testBitAndSExt8(0xffff, 0xff));
+    RUN(testBitAndSExt8(0x10000, 0xff));
+    RUN(testBitAndSExt8(0, 0xfff));
+    RUN(testBitAndSExt8(1, 0xfff));
+    RUN(testBitAndSExt8(42, 0xfff));
+    RUN(testBitAndSExt8(-1, 0xfff));
+    RUN(testBitAndSExt8(0xff, 0xfff));
+    RUN(testBitAndSExt8(0x100, 0xfff));
+    RUN(testBitAndSExt8(0xffff, 0xfff));
+    RUN(testBitAndSExt8(0x10000, 0xfff));
+
+    RUN(testSExt16(0));
+    RUN(testSExt16(1));
+    RUN(testSExt16(42));
+    RUN(testSExt16(-1));
+    RUN(testSExt16(0xffff));
+    RUN(testSExt16(0x10000));
+    RUN(testSExt16Fold(0));
+    RUN(testSExt16Fold(1));
+    RUN(testSExt16Fold(42));
+    RUN(testSExt16Fold(-1));
+    RUN(testSExt16Fold(0xffff));
+    RUN(testSExt16Fold(0x10000));
+    RUN(testSExt16SExt8(0));
+    RUN(testSExt16SExt8(1));
+    RUN(testSExt16SExt8(42));
+    RUN(testSExt16SExt8(-1));
+    RUN(testSExt16SExt8(0xffff));
+    RUN(testSExt16SExt8(0x10000));
+    RUN(testSExt16SExt16(0));
+    RUN(testSExt16SExt16(1));
+    RUN(testSExt16SExt16(42));
+    RUN(testSExt16SExt16(-1));
+    RUN(testSExt16SExt16(0xffff));
+    RUN(testSExt16SExt16(0x10000));
+    RUN(testSExt16SExt16(0xffffff));
+    RUN(testSExt16SExt16(0x1000000));
+    RUN(testSExt16BitAnd(0, 0));
+    RUN(testSExt16BitAnd(1, 0));
+    RUN(testSExt16BitAnd(42, 0));
+    RUN(testSExt16BitAnd(-1, 0));
+    RUN(testSExt16BitAnd(0xffff, 0));
+    RUN(testSExt16BitAnd(0x10000, 0));
+    RUN(testSExt16BitAnd(0xffffff, 0));
+    RUN(testSExt16BitAnd(0x1000000, 0));
+    RUN(testSExt16BitAnd(0, 0xf));
+    RUN(testSExt16BitAnd(1, 0xf));
+    RUN(testSExt16BitAnd(42, 0xf));
+    RUN(testSExt16BitAnd(-1, 0xf));
+    RUN(testSExt16BitAnd(0xffff, 0xf));
+    RUN(testSExt16BitAnd(0x10000, 0xf));
+    RUN(testSExt16BitAnd(0xffffff, 0xf));
+    RUN(testSExt16BitAnd(0x1000000, 0xf));
+    RUN(testSExt16BitAnd(0, 0xffff));
+    RUN(testSExt16BitAnd(1, 0xffff));
+    RUN(testSExt16BitAnd(42, 0xffff));
+    RUN(testSExt16BitAnd(-1, 0xffff));
+    RUN(testSExt16BitAnd(0xffff, 0xffff));
+    RUN(testSExt16BitAnd(0x10000, 0xffff));
+    RUN(testSExt16BitAnd(0xffffff, 0xffff));
+    RUN(testSExt16BitAnd(0x1000000, 0xffff));
+    RUN(testSExt16BitAnd(0, 0x8000));
+    RUN(testSExt16BitAnd(1, 0x8000));
+    RUN(testSExt16BitAnd(42, 0x8000));
+    RUN(testSExt16BitAnd(-1, 0x8000));
+    RUN(testSExt16BitAnd(0xffff, 0x8000));
+    RUN(testSExt16BitAnd(0x10000, 0x8000));
+    RUN(testSExt16BitAnd(0xffffff, 0x8000));
+    RUN(testSExt16BitAnd(0x1000000, 0x8000));
+    RUN(testBitAndSExt16(0, 0xf));
+    RUN(testBitAndSExt16(1, 0xf));
+    RUN(testBitAndSExt16(42, 0xf));
+    RUN(testBitAndSExt16(-1, 0xf));
+    RUN(testBitAndSExt16(0xffff, 0xf));
+    RUN(testBitAndSExt16(0x10000, 0xf));
+    RUN(testBitAndSExt16(0xffffff, 0xf));
+    RUN(testBitAndSExt16(0x1000000, 0xf));
+    RUN(testBitAndSExt16(0, 0xffff));
+    RUN(testBitAndSExt16(1, 0xffff));
+    RUN(testBitAndSExt16(42, 0xffff));
+    RUN(testBitAndSExt16(-1, 0xffff));
+    RUN(testBitAndSExt16(0xffff, 0xffff));
+    RUN(testBitAndSExt16(0x10000, 0xffff));
+    RUN(testBitAndSExt16(0xffffff, 0xffff));
+    RUN(testBitAndSExt16(0x1000000, 0xffff));
+    RUN(testBitAndSExt16(0, 0xfffff));
+    RUN(testBitAndSExt16(1, 0xfffff));
+    RUN(testBitAndSExt16(42, 0xfffff));
+    RUN(testBitAndSExt16(-1, 0xfffff));
+    RUN(testBitAndSExt16(0xffff, 0xfffff));
+    RUN(testBitAndSExt16(0x10000, 0xfffff));
+    RUN(testBitAndSExt16(0xffffff, 0xfffff));
+    RUN(testBitAndSExt16(0x1000000, 0xfffff));
+
+    RUN(testSExt32BitAnd(0, 0));
+    RUN(testSExt32BitAnd(1, 0));
+    RUN(testSExt32BitAnd(42, 0));
+    RUN(testSExt32BitAnd(-1, 0));
+    RUN(testSExt32BitAnd(0x80000000, 0));
+    RUN(testSExt32BitAnd(0, 0xf));
+    RUN(testSExt32BitAnd(1, 0xf));
+    RUN(testSExt32BitAnd(42, 0xf));
+    RUN(testSExt32BitAnd(-1, 0xf));
+    RUN(testSExt32BitAnd(0x80000000, 0xf));
+    RUN(testSExt32BitAnd(0, 0x80000000));
+    RUN(testSExt32BitAnd(1, 0x80000000));
+    RUN(testSExt32BitAnd(42, 0x80000000));
+    RUN(testSExt32BitAnd(-1, 0x80000000));
+    RUN(testSExt32BitAnd(0x80000000, 0x80000000));
+    RUN(testBitAndSExt32(0, 0xf));
+    RUN(testBitAndSExt32(1, 0xf));
+    RUN(testBitAndSExt32(42, 0xf));
+    RUN(testBitAndSExt32(-1, 0xf));
+    RUN(testBitAndSExt32(0xffff, 0xf));
+    RUN(testBitAndSExt32(0x10000, 0xf));
+    RUN(testBitAndSExt32(0xffffff, 0xf));
+    RUN(testBitAndSExt32(0x1000000, 0xf));
+    RUN(testBitAndSExt32(0, 0xffff00000000llu));
+    RUN(testBitAndSExt32(1, 0xffff00000000llu));
+    RUN(testBitAndSExt32(42, 0xffff00000000llu));
+    RUN(testBitAndSExt32(-1, 0xffff00000000llu));
+    RUN(testBitAndSExt32(0x80000000, 0xffff00000000llu));
+
     RUN(testBasicSelect());
     RUN(testSelectTest());
     RUN(testSelectCompareDouble());
@@ -8587,6 +9975,7 @@ void run(const char* filter)
 
     for (ThreadIdentifier thread : threads)
         waitForThreadCompletion(thread);
+    crashLock.lock();
 }
 
 } // anonymous namespace

@@ -149,6 +149,9 @@ void printInternal(PrintStream& out, Opcode opcode)
     case Abs:
         out.print("Abs");
         return;
+    case Ceil:
+        out.print("Ceil");
+        return;
     case Sqrt:
         out.print("Sqrt");
         return;
@@ -172,9 +175,6 @@ void printInternal(PrintStream& out, Opcode opcode)
         return;
     case IToD:
         out.print("IToD");
-        return;
-    case DToI32:
-        out.print("DToI32");
         return;
     case FloatToDouble:
         out.print("FloatToDouble");
@@ -211,6 +211,9 @@ void printInternal(PrintStream& out, Opcode opcode)
         return;
     case BelowEqual:
         out.print("BelowEqual");
+        return;
+    case EqualOrUnordered:
+        out.print("EqualOrUnordered");
         return;
     case Select:
         out.print("Select");

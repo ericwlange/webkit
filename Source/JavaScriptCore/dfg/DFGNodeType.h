@@ -152,6 +152,7 @@ namespace JSC { namespace DFG {
     macro(ArithMax, NodeResultNumber) \
     macro(ArithFRound, NodeResultNumber) \
     macro(ArithPow, NodeResultNumber) \
+    macro(ArithRandom, NodeResultDouble | NodeMustGenerate) \
     macro(ArithRound, NodeResultNumber) \
     macro(ArithSqrt, NodeResultNumber) \
     macro(ArithSin, NodeResultNumber) \
@@ -272,6 +273,7 @@ namespace JSC { namespace DFG {
     macro(CheckStructureImmediate, NodeMustGenerate) \
     macro(MaterializeNewObject, NodeResultJS | NodeHasVarArgs) \
     macro(PhantomNewFunction, NodeResultJS | NodeMustGenerate) \
+    macro(PhantomNewGeneratorFunction, NodeResultJS | NodeMustGenerate) \
     macro(PhantomCreateActivation, NodeResultJS | NodeMustGenerate) \
     macro(MaterializeCreateActivation, NodeResultJS | NodeHasVarArgs) \
     \
@@ -313,6 +315,7 @@ namespace JSC { namespace DFG {
     macro(NewFunction, NodeResultJS) \
     \
     macro(NewArrowFunction, NodeResultJS) \
+    macro(NewGeneratorFunction, NodeResultJS) \
     \
     /* These aren't terminals but always exit */ \
     macro(Throw, NodeMustGenerate) \

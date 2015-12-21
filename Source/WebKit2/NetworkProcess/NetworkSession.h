@@ -26,11 +26,14 @@
 #ifndef NetworkSession_h
 #define NetworkSession_h
 
+#if PLATFORM(COCOA)
 OBJC_CLASS NSURLSession;
 OBJC_CLASS NSURLSessionDataTask;
 OBJC_CLASS NSOperationQueue;
-OBJC_CLASS NetworkSessionDelegate;
+OBJC_CLASS WKNetworkSessionDelegate;
+#endif
 
+#include "DownloadID.h"
 #include <WebCore/FrameLoaderTypes.h>
 #include <WebCore/SessionID.h>
 #include <wtf/HashMap.h>
@@ -61,7 +64,8 @@ class NetworkSession;
 
 class NetworkSessionTaskClient {
 public:
-    virtual void willPerformHTTPRedirection(const WebCore::ResourceResponse&, const WebCore::ResourceRequest&, std::function<void(const WebCore::ResourceRequest&)>) = 0;
+    typedef std::function<void(const WebCore::ResourceRequest&)> RedirectCompletionHandler;
+    virtual void willPerformHTTPRedirection(const WebCore::ResourceResponse&, const WebCore::ResourceRequest&, RedirectCompletionHandler) = 0;
     typedef std::function<void(AuthenticationChallengeDisposition, const WebCore::Credential&)> ChallengeCompletionHandler;
     virtual void didReceiveChallenge(const WebCore::AuthenticationChallenge&, ChallengeCompletionHandler) = 0;
     typedef std::function<void(WebCore::PolicyAction)> ResponseCompletionHandler;
@@ -79,7 +83,8 @@ public:
     void cancel();
     void resume();
 
-    uint64_t taskIdentifier();
+    typedef uint64_t TaskIdentifier;
+    TaskIdentifier taskIdentifier();
 
     ~NetworkDataTask();
 
@@ -111,14 +116,15 @@ public:
     
     Ref<NetworkDataTask> createDataTaskWithRequest(const WebCore::ResourceRequest&, NetworkSessionTaskClient&);
 
-    NetworkDataTask* dataTaskForIdentifier(uint64_t);
+    NetworkDataTask* dataTaskForIdentifier(NetworkDataTask::TaskIdentifier);
 
 private:
     WebCore::SessionID m_sessionID;
-    HashMap<uint64_t, NetworkDataTask*> m_dataTaskMap;
+    HashMap<NetworkDataTask::TaskIdentifier, NetworkDataTask*> m_dataTaskMap;
+    HashMap<NetworkDataTask::TaskIdentifier, DownloadID> m_downloadMap;
 #if PLATFORM(COCOA)
     RetainPtr<NSURLSession> m_session;
-    RetainPtr<NetworkSessionDelegate> m_sessionDelegate;
+    RetainPtr<WKNetworkSessionDelegate> m_sessionDelegate;
 #endif
 };
 

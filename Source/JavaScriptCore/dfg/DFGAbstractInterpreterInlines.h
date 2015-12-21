@@ -233,6 +233,12 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
     case BitRShift:
     case BitLShift:
     case BitURShift: {
+        if (node->child1().useKind() == UntypedUse || node->child2().useKind() == UntypedUse) {
+            clobberWorld(node->origin.semantic, clobberLimit);
+            forNode(node).setType(m_graph, SpecInt32);
+            break;
+        }
+
         JSValue left = forNode(node->child1()).value();
         JSValue right = forNode(node->child2()).value();
         if (left && right && left.isInt32() && right.isInt32()) {
@@ -819,6 +825,11 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
             }
         }
         forNode(node).setType(typeOfDoublePow(forNode(node->child1()).m_type, forNode(node->child2()).m_type));
+        break;
+    }
+
+    case ArithRandom: {
+        forNode(node).setType(m_graph, SpecDoubleReal);
         break;
     }
 
@@ -1703,6 +1714,7 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
         
     case PhantomNewObject:
     case PhantomNewFunction:
+    case PhantomNewGeneratorFunction:
     case PhantomCreateActivation:
     case PhantomDirectArguments:
     case PhantomClonedArguments:
@@ -1749,7 +1761,12 @@ bool AbstractInterpreter<AbstractStateType>::executeEffects(unsigned clobberLimi
         forNode(node).set(
             m_graph, m_codeBlock->globalObjectFor(node->origin.semantic)->arrowFunctionStructure());
         break;
-            
+
+    case NewGeneratorFunction:
+        forNode(node).set(
+            m_graph, m_codeBlock->globalObjectFor(node->origin.semantic)->generatorFunctionStructure());
+        break;
+
     case NewFunction:
         forNode(node).set(
             m_graph, m_codeBlock->globalObjectFor(node->origin.semantic)->functionStructure());

@@ -2287,6 +2287,10 @@ void SpeculativeJIT::compile(Node* node)
         break;
     }
 
+    case ArithRandom:
+        compileArithRandom(node);
+        break;
+
     case ArithRound:
         compileArithRound(node);
         break;
@@ -4440,6 +4444,7 @@ void SpeculativeJIT::compile(Node* node)
 
     case NewFunction:
     case NewArrowFunction:
+    case NewGeneratorFunction:
         compileNewFunction(node);
         break;
 
@@ -4834,6 +4839,7 @@ void SpeculativeJIT::compile(Node* node)
     case BottomValue:
     case PhantomNewObject:
     case PhantomNewFunction:
+    case PhantomNewGeneratorFunction:
     case PhantomCreateActivation:
     case PutHint:
     case CheckStructureImmediate:
@@ -4880,6 +4886,18 @@ void SpeculativeJIT::moveFalseTo(GPRReg gpr)
 
 void SpeculativeJIT::blessBoolean(GPRReg)
 {
+}
+
+void SpeculativeJIT::compileArithRandom(Node* node)
+{
+    JSGlobalObject* globalObject = m_jit.graph().globalObjectFor(node->origin.semantic);
+
+    flushRegisters();
+
+    FPRResult result(this);
+    callOperation(operationRandom, result.fpr(), globalObject);
+    // operationRandom does not raise any exception.
+    doubleResult(result.fpr(), node);
 }
 
 #endif

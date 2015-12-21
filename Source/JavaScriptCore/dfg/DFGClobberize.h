@@ -121,12 +121,6 @@ void clobberize(Graph& graph, Node* node, const ReadFunctor& read, const WriteFu
     case CheckStructureImmediate:
         return;
         
-    case BitAnd:
-    case BitOr:
-    case BitXor:
-    case BitLShift:
-    case BitRShift:
-    case BitURShift:
     case ArithIMul:
     case ArithAbs:
     case ArithClz32:
@@ -162,6 +156,25 @@ void clobberize(Graph& graph, Node* node, const ReadFunctor& read, const WriteFu
     case BottomValue:
     case TypeOf:
         def(PureValue(node));
+        return;
+
+    case BitAnd:
+    case BitOr:
+    case BitXor:
+    case BitLShift:
+    case BitRShift:
+    case BitURShift:
+        if (node->child1().useKind() == UntypedUse || node->child2().useKind() == UntypedUse) {
+            read(World);
+            write(Heap);
+            return;
+        }
+        def(PureValue(node));
+        return;
+
+    case ArithRandom:
+        read(MathDotRandomState);
+        write(MathDotRandomState);
         return;
         
     case HasGenericProperty:
@@ -1022,6 +1035,7 @@ void clobberize(Graph& graph, Node* node, const ReadFunctor& read, const WriteFu
     case PhantomNewObject:
     case MaterializeNewObject:
     case PhantomNewFunction:
+    case PhantomNewGeneratorFunction:
     case PhantomCreateActivation:
     case MaterializeCreateActivation:
         read(HeapObjectCount);
@@ -1030,6 +1044,7 @@ void clobberize(Graph& graph, Node* node, const ReadFunctor& read, const WriteFu
     
     case NewArrowFunction:
     case NewFunction:
+    case NewGeneratorFunction:
         if (node->castOperand<FunctionExecutable*>()->singletonFunction()->isStillValid())
             write(Watchpoint_fire);
         read(HeapObjectCount);

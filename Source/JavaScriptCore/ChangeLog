@@ -1,3 +1,2411 @@
+2015-12-21  Csaba Osztrogonác  <ossy@webkit.org>
+
+        Unreviewed, fix the !FTL_USES_B3 build after r194334.
+
+        * ftl/FTLLowerDFGToLLVM.cpp: Mark forwarding unused variable.
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileCallOrConstructVarargs):
+
+2015-12-21  Filip Pizlo  <fpizlo@apple.com>
+
+        FTL B3 should do doubleToInt32
+        https://bugs.webkit.org/show_bug.cgi?id=152484
+
+        Reviewed by Saam Barati.
+
+        We used to have a DToI32 opcode in B3 that we never implemented. This removes that opcode,
+        since double-to-int conversion has dramatically different semantics on different
+        architectures. We let FTL get the conversion instruction it wants by using a patchpoint.
+
+        * b3/B3Opcode.cpp:
+        (WTF::printInternal):
+        * b3/B3Opcode.h:
+        * b3/B3Validate.cpp:
+        * b3/B3Value.cpp:
+        (JSC::B3::Value::effects):
+        (JSC::B3::Value::key):
+        (JSC::B3::Value::typeFor):
+        * b3/B3ValueKey.cpp:
+        (JSC::B3::ValueKey::materialize):
+        * ftl/FTLB3Output.cpp:
+        (JSC::FTL::Output::Output):
+        (JSC::FTL::Output::appendTo):
+        (JSC::FTL::Output::lockedStackSlot):
+        (JSC::FTL::Output::load):
+        (JSC::FTL::Output::doublePowi):
+        (JSC::FTL::Output::hasSensibleDoubleToInt):
+        (JSC::FTL::Output::doubleToInt):
+        (JSC::FTL::Output::doubleToUInt):
+        (JSC::FTL::Output::load8SignExt32):
+        (JSC::FTL::Output::load8ZeroExt32):
+        (JSC::FTL::Output::load16SignExt32):
+        (JSC::FTL::Output::load16ZeroExt32):
+        (JSC::FTL::Output::store):
+        (JSC::FTL::Output::store32As8):
+        (JSC::FTL::Output::store32As16):
+        (JSC::FTL::Output::branch):
+        * ftl/FTLB3Output.h:
+        (JSC::FTL::Output::doubleLog):
+        (JSC::FTL::Output::signExt32To64):
+        (JSC::FTL::Output::zeroExt):
+        (JSC::FTL::Output::zeroExtPtr):
+        (JSC::FTL::Output::intToDouble):
+        (JSC::FTL::Output::unsignedToDouble):
+        (JSC::FTL::Output::castToInt32):
+        (JSC::FTL::Output::hasSensibleDoubleToInt): Deleted.
+        (JSC::FTL::Output::sensibleDoubleToInt): Deleted.
+        (JSC::FTL::Output::fpToInt32): Deleted.
+        (JSC::FTL::Output::fpToUInt32): Deleted.
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileArithPow):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compilePutByVal):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileSwitch):
+        (JSC::FTL::DFG::LowerDFGToLLVM::doubleToInt32):
+        (JSC::FTL::DFG::LowerDFGToLLVM::sensibleDoubleToInt32):
+        (JSC::FTL::DFG::LowerDFGToLLVM::convertDoubleToInt32):
+        * ftl/FTLOutput.h:
+        (JSC::FTL::Output::hasSensibleDoubleToInt):
+        (JSC::FTL::Output::doubleToInt):
+        (JSC::FTL::Output::doubleToUInt):
+        (JSC::FTL::Output::signExt32To64):
+        (JSC::FTL::Output::zeroExt):
+
+2015-12-21  Skachkov Oleksandr  <gskachkov@gmail.com>
+
+        Unexpected exception assigning to this._property inside arrow function
+        https://bugs.webkit.org/show_bug.cgi?id=152028
+
+        Reviewed by Saam Barati.
+
+        The issue appeared in case if in arrow function created base-level lexical envioronment, and in this case 
+        |this| value was loaded from wrong scope. The problem was that loading of the |this| happened too early when
+        compiling bytecode because the bytecode generators's scope stack wasn't in sync with runtime scope stack.
+        To fix issue loading of |this| was moved after initializeDefaultParameterValuesAndSetupFunctionScopeStack 
+        in BytecodeGenerator.cpp   
+
+        * bytecompiler/BytecodeGenerator.cpp:
+        (JSC::BytecodeGenerator::BytecodeGenerator):
+        * tests/stress/arrowfunction-lexical-bind-this-2.js:
+
+2015-12-21  Filip Pizlo  <fpizlo@apple.com>
+
+        FTL B3 should do vararg calls
+        https://bugs.webkit.org/show_bug.cgi?id=152468
+
+        Reviewed by Benjamin Poulain.
+
+        This adds FTL->B3 lowering of all kinds of varargs calls - forwarding or not, tail or not,
+        and construct or not. Like all other such lowerings, all of the code is in one place in
+        FTLLower.
+
+        I removed code for varargs and exception spill slots from the B3 path, since it won't need
+        it. The plan is to rely on B3 doing the spilling for us by using some combination of early
+        clobber and late use.
+
+        This adds ValueRep::emitRestore(), a helpful method for emitting code to restore any ValueRep
+        into any 64-bit Reg (FPR or GPR).
+
+        I wrote new tests for vararg calls, because I wasn't sure which of the existing ones we can
+        run. These are short-running tests, so I'm not worried about bloating our test suite.
+
+        * b3/B3ValueRep.cpp:
+        (JSC::B3::ValueRep::dump):
+        (JSC::B3::ValueRep::emitRestore):
+        * b3/B3ValueRep.h:
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::lower):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileCallOrConstructVarargs):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileInvalidationPoint):
+        * ftl/FTLState.h:
+        * tests/stress/varargs-no-forward.js: Added.
+        * tests/stress/varargs-simple.js: Added.
+        * tests/stress/varargs-two-level.js: Added.
+
+2015-12-18  Mark Lam  <mark.lam@apple.com>
+
+        Add unary operator tests to compare JIT and LLINT results.
+        https://bugs.webkit.org/show_bug.cgi?id=152453
+
+        Reviewed by Benjamin Poulain.
+
+        Also fixed a few things in the binary-op-test.js.
+
+        * tests/stress/op_negate.js: Added.
+        (o1.valueOf):
+        * tests/stress/op_postdec.js: Added.
+        (o1.valueOf):
+        * tests/stress/op_postinc.js: Added.
+        (o1.valueOf):
+        * tests/stress/op_predec.js: Added.
+        (o1.valueOf):
+        * tests/stress/op_preinc.js: Added.
+        (o1.valueOf):
+        * tests/stress/resources/binary-op-test.js:
+        (stringifyIfNeeded):
+        (isIdentical):
+        (run):
+        * tests/stress/resources/unary-op-test.js: Added.
+        (stringifyIfNeeded):
+        (generateBinaryTests):
+        (isIdentical):
+        (runTest):
+        (run):
+
+2015-12-21  Ryan Haddad  <ryanhaddad@apple.com>
+
+        Unreviewed, rolling out r194328.
+
+        This change appears to have caused failures in JSC tests
+
+        Reverted changeset:
+
+        "[INTL] Implement String.prototype.localeCompare in ECMA-402"
+        https://bugs.webkit.org/show_bug.cgi?id=147607
+        http://trac.webkit.org/changeset/194328
+
+2015-12-21  Filip Pizlo  <fpizlo@apple.com>
+
+        B3->Air lowering incorrectly copy-propagates over ZExt32's
+        https://bugs.webkit.org/show_bug.cgi?id=152365
+
+        Reviewed by Benjamin Poulain.
+
+        The instruction selector thinks that Value's that return Int32's are going to always be lowered
+        to instructions that zero-extend the destination. But this isn't actually true. If you have an
+        Add32 with a destination on the stack (i.e. spilled) then it only writes 4 bytes. Then, the
+        filler will load 8 bytes from the stack at the point of use. So, the use of the Add32 will see
+        garbage in the high bits.
+
+        The fact that the spiller chose to use 8 bytes for a Tmp that gets defined by an Add32 is a
+        pretty sad bug, but:
+
+        - It's entirely up to the spiller to decide how many bytes to use for a Tmp, since we do not
+          ascribe a type to Tmps. We could ascribe types to Tmps, but then coalescing would become
+          harder. Our goal is to fix the bug while still enabling coalescing in cases like "a[i]" where
+          "i" is a 32-bit integer that is computed using operations that already do zero-extension.
+
+        - More broadly, it's strange that the instruction selector decides whether a Value will be
+          lowered to something that zero-extends. That's too constraining, since the most optimal
+          instruction selection might involve something that doesn't zero-extend in cases of spilling, so
+          the zero-extension should only happen if it's actually needed. This means that we need to
+          understand which Air instructions cause zero-extensions.
+
+        - If we know which Air instructions cause zero-extensions, then we don't need the instruction
+          selector to copy-propagate ZExt32's. We have copy-propagation in Air thanks to the register
+          allocator.
+
+        In fact, the register allocator is exactly where all of the pieces come together. It's there that
+        we want to know which operations zero-extend and which don't. It also wants to know how many bits
+        of a Tmp each instruction reads. Armed with that information, the register allocator can emit
+        more optimal spill code, use less stack space for spill slots, and coalesce Move32's. As a bonus,
+        on X86, it replaces Move's with Move32's whenever it can. On X86, Move32 is cheaper.
+
+        This fixes a crash bug in V8/encrypt. After fixing this, I only needed two minor fixes to get
+        V8/encrypt to run. We're about 10% behind LLVM on steady state throughput on this test. It
+        appears to be mostly due to excessive spilling caused by CCall slow paths. That's fixable: we
+        could make CCalls on slow paths use a variant of CCallSpecial that promises not to clobber any
+        registers, and then have it emit spill code around the call itself. LLVM probably gets this
+        optimization from its live range splitting.
+
+        I tried writing a regression test. The problem is that you need garbage on the stack for this to
+        work, and I didn't feel like writing a flaky test. It appears that running V8/encrypt will cover
+        this, so we do have coverage.
+
+        * CMakeLists.txt:
+        * JavaScriptCore.xcodeproj/project.pbxproj:
+        * assembler/AbstractMacroAssembler.h:
+        (JSC::isX86):
+        (JSC::isX86_64):
+        (JSC::optimizeForARMv7IDIVSupported):
+        (JSC::optimizeForX86):
+        (JSC::optimizeForX86_64):
+        * b3/B3LowerToAir.cpp:
+        (JSC::B3::Air::LowerToAir::highBitsAreZero):
+        (JSC::B3::Air::LowerToAir::shouldCopyPropagate):
+        (JSC::B3::Air::LowerToAir::lower):
+        * b3/B3PatchpointSpecial.cpp:
+        (JSC::B3::PatchpointSpecial::forEachArg):
+        * b3/B3StackmapSpecial.cpp:
+        (JSC::B3::StackmapSpecial::forEachArgImpl):
+        * b3/B3Value.h:
+        * b3/air/AirAllocateStack.cpp:
+        (JSC::B3::Air::allocateStack):
+        * b3/air/AirArg.cpp:
+        (WTF::printInternal):
+        * b3/air/AirArg.h:
+        (JSC::B3::Air::Arg::pointerWidth):
+        (JSC::B3::Air::Arg::isAnyUse):
+        (JSC::B3::Air::Arg::isColdUse):
+        (JSC::B3::Air::Arg::isEarlyUse):
+        (JSC::B3::Air::Arg::isDef):
+        (JSC::B3::Air::Arg::isZDef):
+        (JSC::B3::Air::Arg::widthForB3Type):
+        (JSC::B3::Air::Arg::conservativeWidth):
+        (JSC::B3::Air::Arg::minimumWidth):
+        (JSC::B3::Air::Arg::bytes):
+        (JSC::B3::Air::Arg::widthForBytes):
+        (JSC::B3::Air::Arg::Arg):
+        (JSC::B3::Air::Arg::forEachTmp):
+        * b3/air/AirCCallSpecial.cpp:
+        (JSC::B3::Air::CCallSpecial::forEachArg):
+        * b3/air/AirEliminateDeadCode.cpp:
+        (JSC::B3::Air::eliminateDeadCode):
+        * b3/air/AirFixPartialRegisterStalls.cpp:
+        (JSC::B3::Air::fixPartialRegisterStalls):
+        * b3/air/AirInst.cpp:
+        (JSC::B3::Air::Inst::hasArgEffects):
+        * b3/air/AirInst.h:
+        (JSC::B3::Air::Inst::forEachTmpFast):
+        (JSC::B3::Air::Inst::forEachTmp):
+        * b3/air/AirInstInlines.h:
+        (JSC::B3::Air::Inst::forEachTmpWithExtraClobberedRegs):
+        * b3/air/AirIteratedRegisterCoalescing.cpp:
+        * b3/air/AirLiveness.h:
+        (JSC::B3::Air::AbstractLiveness::AbstractLiveness):
+        (JSC::B3::Air::AbstractLiveness::LocalCalc::execute):
+        * b3/air/AirOpcode.opcodes:
+        * b3/air/AirSpillEverything.cpp:
+        (JSC::B3::Air::spillEverything):
+        * b3/air/AirTmpWidth.cpp: Added.
+        (JSC::B3::Air::TmpWidth::TmpWidth):
+        (JSC::B3::Air::TmpWidth::~TmpWidth):
+        * b3/air/AirTmpWidth.h: Added.
+        (JSC::B3::Air::TmpWidth::width):
+        (JSC::B3::Air::TmpWidth::defWidth):
+        (JSC::B3::Air::TmpWidth::useWidth):
+        (JSC::B3::Air::TmpWidth::Widths::Widths):
+        * b3/air/AirUseCounts.h:
+        (JSC::B3::Air::UseCounts::UseCounts):
+        * b3/air/opcode_generator.rb:
+        * b3/testb3.cpp:
+        (JSC::B3::testCheckMegaCombo):
+        (JSC::B3::testCheckTrickyMegaCombo):
+        (JSC::B3::testCheckTwoMegaCombos):
+        (JSC::B3::run):
+
+2015-12-21  Andy VanWagoner  <thetalecrafter@gmail.com>
+
+        [INTL] Implement String.prototype.localeCompare in ECMA-402
+        https://bugs.webkit.org/show_bug.cgi?id=147607
+
+        Reviewed by Darin Adler.
+
+        Add localeCompare in builtin JavaScript that delegates comparing to Intl.Collator.
+        Keep existing native implementation for use if INTL flag is disabled.
+
+        * CMakeLists.txt:
+        * DerivedSources.make:
+        * JavaScriptCore.xcodeproj/project.pbxproj:
+        * builtins/StringPrototype.js: Added.
+        (localeCompare):
+        * runtime/StringPrototype.cpp:
+        (JSC::StringPrototype::finishCreation):
+
+2015-12-18  Filip Pizlo  <fpizlo@apple.com>
+
+        Implement compareDouble in B3/Air
+        https://bugs.webkit.org/show_bug.cgi?id=150903
+
+        Reviewed by Benjamin Poulain.
+
+        A hole in our coverage is that we don't fuse a double comparison into a branch, then we will
+        crash in the instruction selector. Obviously, we *really* want to fuse double comparisons,
+        but we can't guarantee that this will always happen.
+
+        This also removes all uses of WTF::Dominators verification, since it's extremely slow even in
+        a release build. This speeds up testb3 with validateGraphAtEachPhase=true by an order of
+        magnitude.
+
+        * assembler/MacroAssembler.h:
+        (JSC::MacroAssembler::moveDoubleConditionallyFloat):
+        (JSC::MacroAssembler::compareDouble):
+        (JSC::MacroAssembler::compareFloat):
+        (JSC::MacroAssembler::lea):
+        * b3/B3Dominators.h:
+        (JSC::B3::Dominators::Dominators):
+        * b3/B3LowerToAir.cpp:
+        (JSC::B3::Air::LowerToAir::createCompare):
+        (JSC::B3::Air::LowerToAir::lower):
+        * b3/air/AirOpcode.opcodes:
+        * b3/testb3.cpp:
+        (JSC::B3::testCompare):
+        (JSC::B3::testEqualDouble):
+        (JSC::B3::simpleFunction):
+        (JSC::B3::run):
+        * dfg/DFGDominators.h:
+        (JSC::DFG::Dominators::Dominators):
+
+2015-12-19  Dan Bernstein  <mitz@apple.com>
+
+        [Mac] WebKit contains dead source code for OS X Mavericks and earlier
+        https://bugs.webkit.org/show_bug.cgi?id=152462
+
+        Reviewed by Alexey Proskuryakov.
+
+        - Removed build setting definitions for OS X 10.9 and earlier, and simplified defintions
+          that became uniform across all OS X versions as a result:
+
+        * Configurations/DebugRelease.xcconfig:
+        * Configurations/FeatureDefines.xcconfig:
+        * Configurations/Version.xcconfig:
+
+        * API/JSBase.h: Removed check against __MAC_OS_X_VERSION_MIN_REQUIRED that was always true.
+
+2015-12-19  Benjamin Poulain  <bpoulain@apple.com>
+
+        [JSC] Streamline Tmp indexing inside the register allocator
+        https://bugs.webkit.org/show_bug.cgi?id=152420
+
+        Reviewed by Filip Pizlo.
+
+        AirIteratedRegisterCoalescing has been accumulating a bit of mess over time.
+
+        When it started, every map addressed by Tmp was using Tmp hashing.
+        That caused massive performance problems. Everything perf sensitive was moved
+        to direct array addressing by the absolute Tmp index. This left the code
+        with half of the function using Tmp, the other half using indices.
+
+        With this patch, almost everything is moved to absolute indexing.
+        There are a few advantages to this:
+        -No more conversion churn for Floating Point registers.
+        -Most of the functions can now be shared between GP and FP.
+        -A bit of clean up since the core algorithm only deals with integers now.
+
+        This patch also changes the index type to be a template argument.
+        That will allow future specialization of "m_interferenceEdges" based
+        on the expected problem size.
+
+        Finally, the code related to the program modification (register assignment
+        and spilling) was moved to the wrapper "IteratedRegisterCoalescing".
+
+        The current split is:
+        -AbstractColoringAllocator: common core. Share as much as possible between
+         GP and FP.
+        -ColoringAllocator: the remaining parts of the algorithm, everything that
+         is specific to GP, FP.
+        -IteratedRegisterCoalescing: the "iterated" part of the algorithm.
+         Try to allocate and modify the code as needed.
+
+        The long term plan is:
+        -Move selectSpill() and the coloring loop to AbstractColoringAllocator.
+        -Specialize m_interferenceEdges to make it faster.
+
+        * b3/air/AirIteratedRegisterCoalescing.cpp:
+        * b3/air/AirTmpInlines.h:
+        (JSC::B3::Air::AbsoluteTmpMapper<Arg::GP>::lastMachineRegisterIndex):
+        (JSC::B3::Air::AbsoluteTmpMapper<Arg::FP>::lastMachineRegisterIndex):
+
+2015-12-19  Benjamin Poulain  <bpoulain@apple.com>
+
+        [JSC] FTLB3Output generates some invalid ZExt32
+        https://bugs.webkit.org/show_bug.cgi?id=151905
+
+        Reviewed by Filip Pizlo.
+
+        FTLLowerDFGToLLVM calls zeroExt() to int32 in some cases.
+        We were generating ZExt32 with Int32 as return type :(
+
+        * ftl/FTLB3Output.h:
+        (JSC::FTL::Output::zeroExt):
+
+2015-12-19  Benjamin Poulain  <bpoulain@apple.com>
+
+        [JSC] Add EqualOrUnordered to B3
+        https://bugs.webkit.org/show_bug.cgi?id=152425
+
+        Reviewed by Mark Lam.
+
+        Add EqualOrUnordered to B3 and use it to implements
+        FTL::Output's NotEqualAndOrdered.
+
+        * b3/B3ConstDoubleValue.cpp:
+        (JSC::B3::ConstDoubleValue::equalOrUnordered):
+        * b3/B3ConstDoubleValue.h:
+        * b3/B3LowerToAir.cpp:
+        (JSC::B3::Air::LowerToAir::createGenericCompare):
+        (JSC::B3::Air::LowerToAir::lower):
+        * b3/B3Opcode.cpp:
+        (WTF::printInternal):
+        * b3/B3Opcode.h:
+        * b3/B3ReduceDoubleToFloat.cpp:
+        (JSC::B3::reduceDoubleToFloat):
+        * b3/B3ReduceStrength.cpp:
+        * b3/B3Validate.cpp:
+        * b3/B3Value.cpp:
+        (JSC::B3::Value::equalOrUnordered):
+        (JSC::B3::Value::returnsBool):
+        (JSC::B3::Value::effects):
+        (JSC::B3::Value::key):
+        (JSC::B3::Value::typeFor):
+        * b3/B3Value.h:
+        * b3/testb3.cpp:
+        (JSC::B3::testBranchEqualOrUnorderedArgs):
+        (JSC::B3::testBranchNotEqualAndOrderedArgs):
+        (JSC::B3::testBranchEqualOrUnorderedDoubleArgImm):
+        (JSC::B3::testBranchEqualOrUnorderedFloatArgImm):
+        (JSC::B3::testBranchEqualOrUnorderedDoubleImms):
+        (JSC::B3::testBranchEqualOrUnorderedFloatImms):
+        (JSC::B3::testBranchEqualOrUnorderedFloatWithUselessDoubleConversion):
+        (JSC::B3::run):
+        * ftl/FTLB3Output.h:
+        (JSC::FTL::Output::doubleNotEqualAndOrdered):
+        (JSC::FTL::Output::doubleNotEqual): Deleted.
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::boolify):
+        * ftl/FTLOutput.h:
+        (JSC::FTL::Output::doubleNotEqualAndOrdered):
+        (JSC::FTL::Output::doubleNotEqual): Deleted.
+
+2015-12-19  Benjamin Poulain  <bpoulain@apple.com>
+
+        [JSC] B3: Add indexed addressing when lowering BitwiseCast
+        https://bugs.webkit.org/show_bug.cgi?id=152432
+
+        Reviewed by Geoffrey Garen.
+
+        The MacroAssembler supports it, we should use it.
+
+        * b3/air/AirOpcode.opcodes:
+        * b3/testb3.cpp:
+        (JSC::B3::testBitwiseCastOnDoubleInMemoryIndexed):
+        (JSC::B3::testBitwiseCastOnInt64InMemoryIndexed):
+
+2015-12-18  Andreas Kling  <akling@apple.com>
+
+        Make JSString::SafeView less of a footgun.
+        <https://webkit.org/b/152376>
+
+        Reviewed by Darin Adler.
+
+        Remove the "operator StringView()" convenience helper on JSString::SafeString since that
+        made it possible to casually turn the return value from JSString::view() into an unsafe
+        StringView local on the stack with this pattern:
+
+            StringView view = someJSValue.toString(exec)->view(exec);
+
+        The JSString* returned by toString() above will go out of scope by the end of the statement
+        and does not stick around to protect itself from garbage collection.
+
+        It will now look like this instead:
+
+            JSString::SafeView view = someJSValue.toString(exec)->view(exec);
+
+        To be extra clear, the following is not safe:
+
+            StringView view = someJSValue.toString(exec)->view(exec).get();
+
+        By the end of that statement, the JSString::SafeView goes out of scope, and the JSString*
+        is no longer protected from GC.
+
+        I added a couple of forwarding helpers to the SafeView class, and if you need a StringView
+        object from it, you can call .get() just like before.
+
+        Finally I also removed the JSString::SafeView() constructor, since nobody was instantiating
+        empty SafeView objects anyway. This way we don't have to worry about null members.
+
+        * runtime/ArrayPrototype.cpp:
+        (JSC::arrayProtoFuncJoin):
+        * runtime/FunctionConstructor.cpp:
+        (JSC::constructFunctionSkippingEvalEnabledCheck):
+        * runtime/JSGenericTypedArrayViewPrototypeFunctions.h:
+        (JSC::genericTypedArrayViewProtoFuncJoin):
+        * runtime/JSGlobalObjectFunctions.cpp:
+        (JSC::decode):
+        (JSC::globalFuncParseInt):
+        (JSC::globalFuncParseFloat):
+        (JSC::globalFuncEscape):
+        (JSC::globalFuncUnescape):
+        * runtime/JSONObject.cpp:
+        (JSC::JSONProtoFuncParse):
+        * runtime/JSString.cpp:
+        (JSC::JSString::getPrimitiveNumber):
+        (JSC::JSString::toNumber):
+        * runtime/JSString.h:
+        (JSC::JSString::SafeView::is8Bit):
+        (JSC::JSString::SafeView::length):
+        (JSC::JSString::SafeView::characters8):
+        (JSC::JSString::SafeView::characters16):
+        (JSC::JSString::SafeView::operator[]):
+        (JSC::JSString::SafeView::SafeView):
+        (JSC::JSString::SafeView::get):
+        (JSC::JSString::SafeView::operator StringView): Deleted.
+        * runtime/StringPrototype.cpp:
+        (JSC::stringProtoFuncCharAt):
+        (JSC::stringProtoFuncCharCodeAt):
+        (JSC::stringProtoFuncIndexOf):
+        (JSC::stringProtoFuncNormalize):
+
+2015-12-18  Saam barati  <sbarati@apple.com>
+
+        BytecodeGenerator::pushLexicalScopeInternal and pushLexicalScope should use enums instead of bools
+        https://bugs.webkit.org/show_bug.cgi?id=152450
+
+        Reviewed by Geoffrey Garen and Joseph Pecoraro.
+
+        This makes comprehending the call sites of these functions
+        easier without looking up the header of the function.
+
+        * bytecompiler/BytecodeGenerator.cpp:
+        (JSC::BytecodeGenerator::BytecodeGenerator):
+        (JSC::BytecodeGenerator::initializeDefaultParameterValuesAndSetupFunctionScopeStack):
+        (JSC::BytecodeGenerator::initializeArrowFunctionContextScopeIfNeeded):
+        (JSC::BytecodeGenerator::emitPrefillStackTDZVariables):
+        (JSC::BytecodeGenerator::pushLexicalScope):
+        (JSC::BytecodeGenerator::pushLexicalScopeInternal):
+        (JSC::BytecodeGenerator::emitPushFunctionNameScope):
+        (JSC::BytecodeGenerator::emitPushCatchScope):
+        * bytecompiler/BytecodeGenerator.h:
+        (JSC::BytecodeGenerator::lastOpcodeID):
+        * bytecompiler/NodesCodegen.cpp:
+        (JSC::BlockNode::emitBytecode):
+        (JSC::ForNode::emitBytecode):
+        (JSC::ForInNode::emitMultiLoopBytecode):
+        (JSC::ForOfNode::emitBytecode):
+        (JSC::SwitchNode::emitBytecode):
+        (JSC::ClassExprNode::emitBytecode):
+
+2015-12-18  Michael Catanzaro  <mcatanzaro@igalia.com>
+
+        Avoid triggering clang's -Wundefined-bool-conversion
+        https://bugs.webkit.org/show_bug.cgi?id=152408
+
+        Reviewed by Mark Lam.
+
+        Add ASSERT_THIS_GC_OBJECT_LOOKS_VALID and ASSERT_THIS_GC_OBJECT_INHERITS to avoid use of
+        ASSERT(this) by ASSERT_GC_OBJECT_LOOKS_VALID and ASSERT_GC_OBJECT_INHERITS.
+
+        * heap/GCAssertions.h:
+
+2015-12-18  Mark Lam  <mark.lam@apple.com>
+
+        Replace SpecialFastCase profiles with ResultProfiles.
+        https://bugs.webkit.org/show_bug.cgi?id=152433
+
+        Reviewed by Saam Barati.
+
+        This is in preparation for upcoming work to enhance the DFG predictions to deal
+        with untyped operands.
+
+        This patch also enhances some of the arithmetic slow paths (for the LLINT and
+        baseline JIT) to collect result profiling info.  This profiling info is not put
+        to use yet. 
+
+        * CMakeLists.txt:
+        * JavaScriptCore.vcxproj/JavaScriptCore.vcxproj:
+        * JavaScriptCore.vcxproj/JavaScriptCore.vcxproj.filters:
+        * JavaScriptCore.xcodeproj/project.pbxproj:
+        * bytecode/CodeBlock.cpp:
+        (JSC::CodeBlock::dumpRareCaseProfile):
+        (JSC::CodeBlock::dumpResultProfile):
+        (JSC::CodeBlock::printLocationAndOp):
+        (JSC::CodeBlock::dumpBytecode):
+        (JSC::CodeBlock::shrinkToFit):
+        (JSC::CodeBlock::dumpValueProfiles):
+        (JSC::CodeBlock::rareCaseProfileCountForBytecodeOffset):
+        (JSC::CodeBlock::resultProfileForBytecodeOffset):
+        (JSC::CodeBlock::updateResultProfileForBytecodeOffset):
+        (JSC::CodeBlock::capabilityLevel):
+        * bytecode/CodeBlock.h:
+        (JSC::CodeBlock::couldTakeSlowCase):
+        (JSC::CodeBlock::addResultProfile):
+        (JSC::CodeBlock::numberOfResultProfiles):
+        (JSC::CodeBlock::specialFastCaseProfileCountForBytecodeOffset):
+        (JSC::CodeBlock::couldTakeSpecialFastCase):
+        (JSC::CodeBlock::addSpecialFastCaseProfile): Deleted.
+        (JSC::CodeBlock::numberOfSpecialFastCaseProfiles): Deleted.
+        (JSC::CodeBlock::specialFastCaseProfile): Deleted.
+        (JSC::CodeBlock::specialFastCaseProfileForBytecodeOffset): Deleted.
+        * bytecode/ValueProfile.cpp: Added.
+        (WTF::printInternal):
+        * bytecode/ValueProfile.h:
+        (JSC::getRareCaseProfileBytecodeOffset):
+        (JSC::ResultProfile::ResultProfile):
+        (JSC::ResultProfile::bytecodeOffset):
+        (JSC::ResultProfile::specialFastPathCount):
+        (JSC::ResultProfile::didObserveNonInt32):
+        (JSC::ResultProfile::didObserveDouble):
+        (JSC::ResultProfile::didObserveNonNegZeroDouble):
+        (JSC::ResultProfile::didObserveNegZeroDouble):
+        (JSC::ResultProfile::didObserveNonNumber):
+        (JSC::ResultProfile::didObserveInt32Overflow):
+        (JSC::ResultProfile::setObservedNonNegZeroDouble):
+        (JSC::ResultProfile::setObservedNegZeroDouble):
+        (JSC::ResultProfile::setObservedNonNumber):
+        (JSC::ResultProfile::setObservedInt32Overflow):
+        (JSC::ResultProfile::addressOfFlags):
+        (JSC::ResultProfile::addressOfSpecialFastPathCount):
+        (JSC::ResultProfile::hasBits):
+        (JSC::ResultProfile::setBit):
+        (JSC::getResultProfileBytecodeOffset):
+        * jit/JITArithmetic.cpp:
+        (JSC::JIT::emit_op_div):
+        (JSC::JIT::emit_op_mul):
+        * jit/JITDivGenerator.cpp:
+        (JSC::JITDivGenerator::generateFastPath):
+        * jit/JITDivGenerator.h:
+        (JSC::JITDivGenerator::JITDivGenerator):
+        * jit/JITMulGenerator.cpp:
+        (JSC::JITMulGenerator::generateFastPath):
+        * jit/JITMulGenerator.h:
+        (JSC::JITMulGenerator::JITMulGenerator):
+        * runtime/CommonSlowPaths.cpp:
+        (JSC::SLOW_PATH_DECL):
+
+2015-12-18  Keith Miller  <keith_miller@apple.com>
+
+        verboseDFGByteCodeParsing option should show the bytecode it is parsing.
+        https://bugs.webkit.org/show_bug.cgi?id=152434
+
+        Reviewed by Michael Saboff.
+
+        * dfg/DFGByteCodeParser.cpp:
+        (JSC::DFG::ByteCodeParser::parseBlock):
+
+2015-12-18  Csaba Osztrogonác  <ossy@webkit.org>
+
+        [ARM] Add the missing setupArgumentsWithExecState functions after r193974
+        https://bugs.webkit.org/show_bug.cgi?id=152214
+
+        Reviewed by Mark Lam.
+
+        Relanding r194007 after r194248.
+
+        * jit/CCallHelpers.h:
+        (JSC::CCallHelpers::setupArgumentsWithExecState):
+
+2015-12-17  Joseph Pecoraro  <pecoraro@apple.com>
+
+        Web Inspector: Remove "local" scope type from the protocol
+        https://bugs.webkit.org/show_bug.cgi?id=152409
+
+        Reviewed by Timothy Hatcher.
+
+        After r194251 the backend no longer sends this scope type.
+        So remove it from the protocol.
+
+        The concept of a Local Scope should be calculatable by the
+        frontend. In fact the way the backend used to do this could
+        easily be done by the frontend. To be done in a follow-up.
+
+        * inspector/InjectedScriptSource.js:
+        * inspector/JSJavaScriptCallFrame.h:
+        * inspector/protocol/Debugger.json:
+
+2015-12-17  Sukolsak Sakshuwong  <sukolsak@gmail.com>
+
+        [INTL] Implement Collator Compare Functions
+        https://bugs.webkit.org/show_bug.cgi?id=147604
+
+        Reviewed by Darin Adler.
+
+        This patch implements Intl.Collator.prototype.compare() according
+        to the ECMAScript 2015 Internationalization API spec (ECMA-402 2nd edition.)
+
+        * runtime/IntlCollator.cpp:
+        (JSC::IntlCollator::~IntlCollator):
+        (JSC::sortLocaleData):
+        (JSC::searchLocaleData):
+        (JSC::IntlCollator::initializeCollator):
+        (JSC::IntlCollator::createCollator):
+        (JSC::IntlCollator::compareStrings):
+        (JSC::IntlCollator::usageString):
+        (JSC::IntlCollator::sensitivityString):
+        (JSC::IntlCollator::resolvedOptions):
+        (JSC::IntlCollator::setBoundCompare):
+        (JSC::IntlCollatorFuncCompare): Deleted.
+        * runtime/IntlCollator.h:
+        (JSC::IntlCollator::usage): Deleted.
+        (JSC::IntlCollator::setUsage): Deleted.
+        (JSC::IntlCollator::locale): Deleted.
+        (JSC::IntlCollator::setLocale): Deleted.
+        (JSC::IntlCollator::collation): Deleted.
+        (JSC::IntlCollator::setCollation): Deleted.
+        (JSC::IntlCollator::numeric): Deleted.
+        (JSC::IntlCollator::setNumeric): Deleted.
+        (JSC::IntlCollator::sensitivity): Deleted.
+        (JSC::IntlCollator::setSensitivity): Deleted.
+        (JSC::IntlCollator::ignorePunctuation): Deleted.
+        (JSC::IntlCollator::setIgnorePunctuation): Deleted.
+        * runtime/IntlCollatorConstructor.cpp:
+        (JSC::constructIntlCollator):
+        (JSC::callIntlCollator):
+        (JSC::sortLocaleData): Deleted.
+        (JSC::searchLocaleData): Deleted.
+        (JSC::initializeCollator): Deleted.
+        * runtime/IntlCollatorPrototype.cpp:
+        (JSC::IntlCollatorFuncCompare):
+        (JSC::IntlCollatorPrototypeFuncResolvedOptions):
+        * runtime/IntlObject.cpp:
+        (JSC::defaultLocale):
+        (JSC::convertICULocaleToBCP47LanguageTag):
+        (JSC::intlStringOption):
+        (JSC::resolveLocale):
+        (JSC::supportedLocales):
+        * runtime/IntlObject.h:
+        * runtime/JSGlobalObject.cpp:
+        (JSC::JSGlobalObject::intlCollatorAvailableLocales):
+        (JSC::JSGlobalObject::intlDateTimeFormatAvailableLocales):
+        (JSC::JSGlobalObject::intlNumberFormatAvailableLocales):
+
+2015-12-17  Joseph Pecoraro  <pecoraro@apple.com>
+
+        Provide a way to distinguish a nested lexical block from a function's lexical block
+        https://bugs.webkit.org/show_bug.cgi?id=152361
+
+        Reviewed by Saam Barati.
+
+        * bytecompiler/BytecodeGenerator.h:
+        * bytecompiler/BytecodeGenerator.cpp:
+        (JSC::BytecodeGenerator::initializeDefaultParameterValuesAndSetupFunctionScopeStack):
+        (JSC::BytecodeGenerator::initializeArrowFunctionContextScopeIfNeeded):
+        (JSC::BytecodeGenerator::emitPushFunctionNameScope):
+        (JSC::BytecodeGenerator::emitPushCatchScope):
+        Each of these are specialized scopes. They are not nested lexical scopes.
+        
+        (JSC::BytecodeGenerator::pushLexicalScope):
+        (JSC::BytecodeGenerator::pushLexicalScopeInternal):
+        Include an extra parameter to mark the SymbolTable as a nested lexical or not.
+
+        * bytecompiler/NodesCodegen.cpp:
+        (JSC::BlockNode::emitBytecode):
+        (JSC::ForNode::emitBytecode):
+        (JSC::ForInNode::emitMultiLoopBytecode):
+        (JSC::ForOfNode::emitBytecode):
+        (JSC::SwitchNode::emitBytecode):
+        (JSC::ClassExprNode::emitBytecode):
+        Each of these are cases of non-function nested lexical scopes.
+        So mark the SymbolTable as nested.
+
+        * inspector/protocol/Debugger.json:
+        * inspector/InjectedScriptSource.js:
+        Include a new scope type.
+
+        * inspector/JSJavaScriptCallFrame.h:
+        * inspector/JSJavaScriptCallFrame.cpp:
+        (Inspector::JSJavaScriptCallFrame::scopeType):
+        Use the new "NestedLexical" scope type for nested, non-function,
+        lexical scopes. The Inspector can use this to better describe
+        this scope in the frontend.
+
+        * debugger/DebuggerScope.cpp:
+        (JSC::DebuggerScope::isNestedLexicalScope):
+        * debugger/DebuggerScope.h:
+        * runtime/JSScope.cpp:
+        (JSC::JSScope::isNestedLexicalScope):
+        * runtime/JSScope.h:
+        * runtime/SymbolTable.cpp:
+        (JSC::SymbolTable::SymbolTable):
+        (JSC::SymbolTable::cloneScopePart):
+        * runtime/SymbolTable.h:
+        Access the isNestedLexicalScope bit.
+
+2015-12-17  Joseph Pecoraro  <pecoraro@apple.com>
+
+        Unreviewed EFL Build Fix after r194247.
+
+        * interpreter/CallFrame.cpp:
+        (JSC::CallFrame::friendlyFunctionName):
+        Handle compilers that don't realize the switch handles all cases.
+
+2015-12-17  Keith Miller  <keith_miller@apple.com>
+
+        [ES6] Add support for Symbol.hasInstance
+        https://bugs.webkit.org/show_bug.cgi?id=151839
+
+        Reviewed by Saam Barati.
+
+        Fixed version of r193986, r193983, and r193974.
+
+        This patch adds support for Symbol.hasInstance, unfortunately in order to prevent
+        regressions several new bytecodes and DFG IR nodes were necessary. Before, Symbol.hasInstance
+        when executing an instanceof expression we would emit three bytecodes: overrides_has_instance, get_by_id,
+        then instanceof. As the spec has changed, we emit a more complicated set of bytecodes in addition to some
+        new ones. First the role of overrides_has_instance and its corresponding DFG node have changed. Now it returns
+        a js-boolean indicating whether the RHS of the instanceof expression (from here on called the constructor for simplicity)
+        needs non-default behavior for resolving the expression. i.e. The constructor has a Symbol.hasInstance that differs from the one on
+        Function.prototype[Symbol.hasInstance] or is a bound/C-API function. Once we get to the DFG this node is generally eliminated as
+        we can prove the value of Symbol.hasInstance is a constant. The second new bytecode is instanceof_custom. insntanceof_custom, just
+        emits a call to slow path code that computes the result.
+
+        In the DFG, there is also a new node, CheckTypeInfoFlags, which checks the type info flags are consistent with the ones provided and
+        OSR exits if the flags are not. Additionally, we attempt to prove that the result of CheckHasValue will be a constant and transform
+        it into a CheckTypeInfoFlags followed by a JSConstant.
+
+        * API/JSCallbackObject.h:
+        * builtins/FunctionPrototype.js:
+        (symbolHasInstance):
+        * bytecode/BytecodeBasicBlock.cpp:
+        (JSC::isBranch): Deleted.
+        * bytecode/BytecodeList.json:
+        * bytecode/BytecodeUseDef.h:
+        (JSC::computeUsesForBytecodeOffset):
+        (JSC::computeDefsForBytecodeOffset):
+        * bytecode/CodeBlock.cpp:
+        (JSC::CodeBlock::dumpBytecode):
+        * bytecode/ExitKind.cpp:
+        (JSC::exitKindToString):
+        * bytecode/ExitKind.h:
+        * bytecode/PreciseJumpTargets.cpp:
+        (JSC::getJumpTargetsForBytecodeOffset): Deleted.
+        * bytecompiler/BytecodeGenerator.cpp:
+        (JSC::BytecodeGenerator::emitOverridesHasInstance):
+        (JSC::BytecodeGenerator::emitInstanceOfCustom):
+        (JSC::BytecodeGenerator::emitCheckHasInstance): Deleted.
+        * bytecompiler/BytecodeGenerator.h:
+        * bytecompiler/NodesCodegen.cpp:
+        (JSC::InstanceOfNode::emitBytecode):
+        * dfg/DFGAbstractInterpreterInlines.h:
+        (JSC::DFG::AbstractInterpreter<AbstractStateType>::executeEffects):
+        * dfg/DFGByteCodeParser.cpp:
+        (JSC::DFG::ByteCodeParser::parseBlock):
+        * dfg/DFGCapabilities.cpp:
+        (JSC::DFG::capabilityLevel):
+        * dfg/DFGClobberize.h:
+        (JSC::DFG::clobberize):
+        * dfg/DFGDoesGC.cpp:
+        (JSC::DFG::doesGC):
+        * dfg/DFGFixupPhase.cpp:
+        (JSC::DFG::FixupPhase::fixupNode):
+        * dfg/DFGHeapLocation.cpp:
+        (WTF::printInternal):
+        * dfg/DFGHeapLocation.h:
+        * dfg/DFGNode.h:
+        (JSC::DFG::Node::hasCellOperand):
+        (JSC::DFG::Node::hasTypeInfoOperand):
+        (JSC::DFG::Node::typeInfoOperand):
+        * dfg/DFGNodeType.h:
+        * dfg/DFGPredictionPropagationPhase.cpp:
+        (JSC::DFG::PredictionPropagationPhase::propagate):
+        * dfg/DFGSafeToExecute.h:
+        (JSC::DFG::safeToExecute):
+        * dfg/DFGSpeculativeJIT.cpp:
+        (JSC::DFG::SpeculativeJIT::compileCheckTypeInfoFlags):
+        (JSC::DFG::SpeculativeJIT::compileInstanceOfCustom):
+        * dfg/DFGSpeculativeJIT.h:
+        (JSC::DFG::SpeculativeJIT::callOperation):
+        * dfg/DFGSpeculativeJIT32_64.cpp:
+        (JSC::DFG::SpeculativeJIT::compile):
+        * dfg/DFGSpeculativeJIT64.cpp:
+        (JSC::DFG::SpeculativeJIT::compile):
+        * ftl/FTLCapabilities.cpp:
+        (JSC::FTL::canCompile):
+        * ftl/FTLIntrinsicRepository.h:
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileNode):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileOverridesHasInstance):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileCheckTypeInfoFlags):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileInstanceOfCustom):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileCheckHasInstance): Deleted.
+        * jit/JIT.cpp:
+        (JSC::JIT::privateCompileMainPass):
+        (JSC::JIT::privateCompileSlowCases):
+        * jit/JIT.h:
+        * jit/JITInlines.h:
+        (JSC::JIT::callOperation):
+        * jit/JITOpcodes.cpp:
+        (JSC::JIT::emit_op_overrides_has_instance):
+        (JSC::JIT::emit_op_instanceof):
+        (JSC::JIT::emit_op_instanceof_custom):
+        (JSC::JIT::emitSlow_op_instanceof):
+        (JSC::JIT::emitSlow_op_instanceof_custom):
+        (JSC::JIT::emit_op_check_has_instance): Deleted.
+        (JSC::JIT::emitSlow_op_check_has_instance): Deleted.
+        * jit/JITOpcodes32_64.cpp:
+        (JSC::JIT::emit_op_overrides_has_instance):
+        (JSC::JIT::emit_op_instanceof):
+        (JSC::JIT::emit_op_instanceof_custom):
+        (JSC::JIT::emitSlow_op_instanceof_custom):
+        (JSC::JIT::emit_op_check_has_instance): Deleted.
+        (JSC::JIT::emitSlow_op_check_has_instance): Deleted.
+        * jit/JITOperations.cpp:
+        * jit/JITOperations.h:
+        * llint/LLIntData.cpp:
+        (JSC::LLInt::Data::performAssertions):
+        * llint/LLIntSlowPaths.cpp:
+        (JSC::LLInt::LLINT_SLOW_PATH_DECL):
+        * llint/LLIntSlowPaths.h:
+        * llint/LowLevelInterpreter32_64.asm:
+        * llint/LowLevelInterpreter64.asm:
+        * runtime/CommonIdentifiers.h:
+        * runtime/ExceptionHelpers.cpp:
+        (JSC::invalidParameterInstanceofSourceAppender):
+        (JSC::invalidParameterInstanceofNotFunctionSourceAppender):
+        (JSC::invalidParameterInstanceofhasInstanceValueNotFunctionSourceAppender):
+        (JSC::createInvalidInstanceofParameterErrorNotFunction):
+        (JSC::createInvalidInstanceofParameterErrorhasInstanceValueNotFunction):
+        (JSC::createInvalidInstanceofParameterError): Deleted.
+        * runtime/ExceptionHelpers.h:
+        * runtime/FunctionPrototype.cpp:
+        (JSC::FunctionPrototype::addFunctionProperties):
+        * runtime/FunctionPrototype.h:
+        * runtime/JSBoundFunction.cpp:
+        (JSC::isBoundFunction):
+        (JSC::hasInstanceBoundFunction):
+        * runtime/JSBoundFunction.h:
+        * runtime/JSGlobalObject.cpp:
+        (JSC::JSGlobalObject::init):
+        (JSC::JSGlobalObject::visitChildren):
+        * runtime/JSGlobalObject.h:
+        (JSC::JSGlobalObject::functionProtoHasInstanceSymbolFunction):
+        * runtime/JSObject.cpp:
+        (JSC::JSObject::hasInstance):
+        (JSC::objectPrivateFuncInstanceOf):
+        * runtime/JSObject.h:
+        * runtime/JSTypeInfo.h:
+        (JSC::TypeInfo::TypeInfo):
+        (JSC::TypeInfo::overridesHasInstance):
+        * runtime/WriteBarrier.h:
+        (JSC::WriteBarrierBase<Unknown>::slot):
+        * tests/es6.yaml:
+        * tests/stress/instanceof-custom-hasinstancesymbol.js: Added.
+        (Constructor):
+        (value):
+        (instanceOf):
+        (body):
+        * tests/stress/symbol-hasInstance.js: Added.
+        (Constructor):
+        (value):
+        (ObjectClass.Symbol.hasInstance):
+        (NumberClass.Symbol.hasInstance):
+
+2015-12-17  Joseph Pecoraro  <pecoraro@apple.com>
+
+        Web Inspector: Improve names in Debugger Call Stack section when paused
+        https://bugs.webkit.org/show_bug.cgi?id=152398
+
+        Reviewed by Brian Burg.
+
+        * debugger/DebuggerCallFrame.cpp:
+        (JSC::DebuggerCallFrame::functionName):
+        Provide a better name from the underlying CallFrame.
+
+        * inspector/InjectedScriptSource.js:
+        (InjectedScript.CallFrameProxy):
+        Just call functionName, it will provide a better
+        than nothing function name.
+
+        * runtime/JSFunction.cpp:
+        (JSC::getCalculatedDisplayName):
+        Use emptyString().
+
+        * interpreter/CallFrame.h:
+        * interpreter/CallFrame.cpp:
+        (JSC::CallFrame::friendlyFunctionName):
+        This is the third similiar implementation of this,
+        but all other cases use other "StackFrame" objects.
+        Use the expected names for program code.
+
+2015-12-16  Joseph Pecoraro  <pecoraro@apple.com>
+
+        Web Inspector: Add JSContext Script Profiling
+        https://bugs.webkit.org/show_bug.cgi?id=151899
+
+        Reviewed by Brian Burg.
+
+        Extend JSC::Debugger to include a profiling client interface
+        that the Inspector can implement to be told about script execution
+        entry and exit points. Add new profiledCall/Evaluate/Construct
+        methods that are entry points that will notify the profiling
+        client if it exists.
+
+        By putting the profiling client on Debugger it avoids having
+        special code paths for a JSGlobalObject being JSContext inspected
+        or a JSGlobalObject in a Page being Web inspected. In either case
+        the JSGlobalObject can go through its debugger() which always
+        reaches the correct inspector instance.
+
+        * CMakeLists.txt:
+        * DerivedSources.make:
+        * JavaScriptCore.xcodeproj/project.pbxproj:
+        Handle new files.
+
+        * runtime/CallData.cpp:
+        (JSC::profiledCall):
+        * runtime/CallData.h:
+        * runtime/Completion.cpp:
+        (JSC::profiledEvaluate):
+        * runtime/Completion.h:
+        (JSC::profiledEvaluate):
+        * runtime/ConstructData.cpp:
+        (JSC::profiledConstruct):
+        * runtime/ConstructData.h:
+        (JSC::profiledConstruct):
+        Create profiled versions of interpreter entry points. If a profiler client is
+        available, this will automatically inform it of entry/exit. Include a reason
+        why this is being profiled. Currently all reasons in JavaScriptCore are enumerated
+        (API, Microtask) and Other is to be used by WebCore or future clients.
+
+        * debugger/ScriptProfilingScope.h: Added.
+        (JSC::ScriptProfilingScope::ScriptProfilingScope):
+        (JSC::ScriptProfilingScope::~ScriptProfilingScope):
+        (JSC::ScriptProfilingScope::shouldStartProfile):
+        (JSC::ScriptProfilingScope::shouldEndProfile):
+        At profiled entry points inform the profiling client if needed.
+
+        * API/JSBase.cpp:
+        (JSEvaluateScript):
+        * API/JSObjectRef.cpp:
+        (JSObjectCallAsFunction):
+        (JSObjectCallAsConstructor):
+        * runtime/JSJob.cpp:
+        (JSC::JSJobMicrotask::run):
+        Use the profiled functions for API and Microtask execution entry points.
+
+        * runtime/JSGlobalObject.cpp:
+        (JSC::JSGlobalObject::hasProfiler):
+        * runtime/JSGlobalObject.h:
+        (JSC::JSGlobalObject::hasProfiler):
+        Extend hasProfiler to also check the new Debugger script profiler.
+
+        * debugger/Debugger.cpp:
+        (JSC::Debugger::setProfilingClient):
+        (JSC::Debugger::willEvaluateScript):
+        (JSC::Debugger::didEvaluateScript):
+        * debugger/Debugger.h:
+        Pass through to the profiling client.
+
+        * inspector/protocol/ScriptProfiler.json: Added.
+        * inspector/agents/InspectorScriptProfilerAgent.cpp: Added.
+        (Inspector::InspectorScriptProfilerAgent::InspectorScriptProfilerAgent):
+        (Inspector::InspectorScriptProfilerAgent::~InspectorScriptProfilerAgent):
+        (Inspector::InspectorScriptProfilerAgent::didCreateFrontendAndBackend):
+        (Inspector::InspectorScriptProfilerAgent::willDestroyFrontendAndBackend):
+        (Inspector::InspectorScriptProfilerAgent::startTracking):
+        (Inspector::InspectorScriptProfilerAgent::stopTracking):
+        (Inspector::InspectorScriptProfilerAgent::isAlreadyProfiling):
+        (Inspector::InspectorScriptProfilerAgent::willEvaluateScript):
+        (Inspector::InspectorScriptProfilerAgent::didEvaluateScript):
+        (Inspector::toProtocol):
+        (Inspector::InspectorScriptProfilerAgent::addEvent):
+        (Inspector::buildAggregateCallInfoInspectorObject):
+        (Inspector::buildInspectorObject):
+        (Inspector::buildProfileInspectorObject):
+        (Inspector::InspectorScriptProfilerAgent::trackingComplete):
+        * inspector/agents/InspectorScriptProfilerAgent.h: Added.
+        New ScriptProfiler domain to just turn on / off script profiling.
+        It introduces a start/update/complete event model which we want
+        to include in new domains.
+
+        * inspector/InspectorEnvironment.h:
+        * inspector/InjectedScriptBase.cpp:
+        (Inspector::InjectedScriptBase::callFunctionWithEvalEnabled):
+        Simplify this now that we want it to be the same for all clients.
+
+        * inspector/JSGlobalObjectInspectorController.h:
+        * inspector/JSGlobalObjectInspectorController.cpp:
+        (Inspector::JSGlobalObjectInspectorController::JSGlobalObjectInspectorController):
+        Create the new agent.
+
+        * inspector/InspectorProtocolTypes.h:
+        (Inspector::Protocol::Array::addItem):
+        Allow pushing a double onto a Protocol::Array.
+
+2015-12-17  Yusuke Suzuki  <utatane.tea@gmail.com>
+
+        [ES6] Handle new_generator_func / new_generator_func_exp in DFG / FTL
+        https://bugs.webkit.org/show_bug.cgi?id=152227
+
+        Reviewed by Saam Barati.
+
+        This patch introduces new_generator_func / new_generator_func_exp into DFG and FTL.
+        We add a new DFG Node, NewGeneratorFunction. It will construct a function with GeneratorFunction's structure.
+        The structure of GeneratorFunction is different from one of Function because GeneratorFunction has the different __proto__.
+
+        Instead of extending NewFunction / PhantomNewFunction, we just added new DFG nodes, NewGeneratorFunction and PhantomNewGeneratorFunction.
+        This is because NewGeneratorFunction will generate an object that has different class info from JSFunction (And if JSGeneratorFunction is extended, its size will become different from JSFunction).
+        So, rather than extending NewFunction with generator flag, just adding new DFG nodes seems cleaner.
+
+        Object allocation sinking phase will change NewGeneratorFunction to PhantomNewGeneratorFunction and defer or eliminate its actual materialization.
+        It is completely the same to NewFunction and PhantomNewFunction.
+        And when OSR exit occurs, we need to execute deferred NewGeneratorFunction since Baseline JIT does not consider it.
+        So in FTL operation, we should create JSGeneratorFunction if we see PhantomNewGeneratorFunction materialization.
+
+        * dfg/DFGAbstractInterpreterInlines.h:
+        (JSC::DFG::AbstractInterpreter<AbstractStateType>::executeEffects):
+        * dfg/DFGByteCodeParser.cpp:
+        (JSC::DFG::ByteCodeParser::parseBlock):
+        * dfg/DFGCapabilities.cpp:
+        (JSC::DFG::capabilityLevel):
+        * dfg/DFGClobberize.h:
+        (JSC::DFG::clobberize):
+        * dfg/DFGClobbersExitState.cpp:
+        (JSC::DFG::clobbersExitState):
+        * dfg/DFGDoesGC.cpp:
+        (JSC::DFG::doesGC):
+        * dfg/DFGFixupPhase.cpp:
+        (JSC::DFG::FixupPhase::fixupNode):
+        * dfg/DFGMayExit.cpp:
+        (JSC::DFG::mayExit):
+        * dfg/DFGNode.h:
+        (JSC::DFG::Node::convertToPhantomNewFunction):
+        (JSC::DFG::Node::convertToPhantomNewGeneratorFunction):
+        (JSC::DFG::Node::hasCellOperand):
+        (JSC::DFG::Node::isFunctionAllocation):
+        (JSC::DFG::Node::isPhantomFunctionAllocation):
+        (JSC::DFG::Node::isPhantomAllocation):
+        * dfg/DFGNodeType.h:
+        * dfg/DFGObjectAllocationSinkingPhase.cpp:
+        * dfg/DFGPredictionPropagationPhase.cpp:
+        (JSC::DFG::PredictionPropagationPhase::propagate):
+        * dfg/DFGSafeToExecute.h:
+        (JSC::DFG::safeToExecute):
+        * dfg/DFGSpeculativeJIT.cpp:
+        (JSC::DFG::SpeculativeJIT::compileNewFunction):
+        * dfg/DFGSpeculativeJIT32_64.cpp:
+        (JSC::DFG::SpeculativeJIT::compile):
+        * dfg/DFGSpeculativeJIT64.cpp:
+        (JSC::DFG::SpeculativeJIT::compile):
+        * dfg/DFGStoreBarrierInsertionPhase.cpp:
+        * dfg/DFGStructureRegistrationPhase.cpp:
+        (JSC::DFG::StructureRegistrationPhase::run):
+        * dfg/DFGValidate.cpp:
+        (JSC::DFG::Validate::validateCPS):
+        (JSC::DFG::Validate::validateSSA):
+        * ftl/FTLCapabilities.cpp:
+        (JSC::FTL::canCompile):
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileNode):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileNewFunction):
+        * ftl/FTLOperations.cpp:
+        (JSC::FTL::operationPopulateObjectInOSR):
+        (JSC::FTL::operationMaterializeObjectInOSR):
+        * tests/stress/generator-function-create-optimized.js: Added.
+        (shouldBe):
+        (g):
+        (test.return.gen):
+        (test):
+        (test2.gen):
+        (test2):
+        * tests/stress/generator-function-declaration-sinking-no-double-allocate.js: Added.
+        (shouldBe):
+        (GeneratorFunctionPrototype):
+        (call):
+        (f):
+        (sink):
+        * tests/stress/generator-function-declaration-sinking-osrexit.js: Added.
+        (shouldBe):
+        (GeneratorFunctionPrototype):
+        (g):
+        (f):
+        (sink):
+        * tests/stress/generator-function-declaration-sinking-put.js: Added.
+        (shouldBe):
+        (GeneratorFunctionPrototype):
+        (g):
+        (f):
+        (sink):
+        * tests/stress/generator-function-expression-sinking-no-double-allocate.js: Added.
+        (shouldBe):
+        (GeneratorFunctionPrototype):
+        (call):
+        (f):
+        (sink):
+        * tests/stress/generator-function-expression-sinking-osrexit.js: Added.
+        (shouldBe):
+        (GeneratorFunctionPrototype):
+        (g):
+        (sink):
+        * tests/stress/generator-function-expression-sinking-put.js: Added.
+        (shouldBe):
+        (GeneratorFunctionPrototype):
+        (g):
+        (sink):
+
+2015-12-16  Michael Saboff  <msaboff@apple.com>
+
+        ARM64 MacroAssembler improperly reuses data temp register in test32() and test8() calls
+        https://bugs.webkit.org/show_bug.cgi?id=152370
+
+        Reviewed by Benjamin Poulain.
+
+        Changed the test8/32(Address, Register) flavors to use the memoryTempRegister for loading the value
+        att Address so that it doesn't collide with the subsequent use of dataTempRegister by the
+        test32(Register, Register) function.
+
+        * assembler/MacroAssemblerARM64.h:
+        (JSC::MacroAssemblerARM64::test32):
+        (JSC::MacroAssemblerARM64::test8):
+
+2015-12-16  Filip Pizlo  <fpizlo@apple.com>
+
+        FTL B3 should support switches
+        https://bugs.webkit.org/show_bug.cgi?id=152360
+
+        Reviewed by Geoffrey Garen.
+
+        I implemented this because I was hoping it would less us run V8/crypto, but instead it just led
+        me to file a fun bug: https://bugs.webkit.org/show_bug.cgi?id=152365.
+
+        * ftl/FTLB3Output.h:
+        (JSC::FTL::Output::check):
+        (JSC::FTL::Output::switchInstruction):
+        (JSC::FTL::Output::ret):
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::ftlUnreachable):
+        (JSC::FTL::DFG::LowerDFGToLLVM::crash):
+
+2015-12-16  Alex Christensen  <achristensen@webkit.org>
+
+        Fix internal Windows build
+        https://bugs.webkit.org/show_bug.cgi?id=152364
+
+        Reviewed by Tim Horton.
+
+        * JavaScriptCore.vcxproj/JavaScriptCore.proj:
+
+2015-12-16  Filip Pizlo  <fpizlo@apple.com>
+
+        Improve JSObject::put performance
+        https://bugs.webkit.org/show_bug.cgi?id=152347
+
+        Reviewed by Geoffrey Garen.
+
+        This adds a new benchmark called dynbench, which just uses the C++ API to create, modify, and
+        query objects. This also adds some optimizations to make the JSObject::put code faster by making
+        it inlinable in places that really need the performance, like JITOperations and LLIntSlowPaths.
+        Inlining it is optional because the put() method is large. If you want it inlined, call
+        putInline(). There's a putInline() variant of both JSObject::put() and JSValue::put().
+
+        This is up to a 20% improvement for JSObject::put calls that get inlined all the way (like from
+        JITOperations and the new benchmark) and it's also a speed-up, albeit a smaller one, for
+        JSObject::put calls that don't get inlined (i.e. those from the DOM and the JSC C++ library code).
+        Specific speed-ups are as follows. Note that "dynamic context" means that we told PutPropertySlot
+        that we're not a static put_by_id, which turns off some type inference.
+
+        Get By Id: 2% faster
+        Put By Id Replace: 23% faster
+        Put By Id Transition + object allocation: 11% faster
+        Get By Id w/ dynamic context: 5% faster
+        Put By Id Replace w/ dynamic context: 25% faster
+        Put By Id Transition + object allocation w/ dynamic context: 10% faster
+
+        * JavaScriptCore.xcodeproj/project.pbxproj:
+        * dynbench.cpp: Added.
+        (JSC::benchmarkImpl):
+        (main):
+        * jit/CallFrameShuffler32_64.cpp:
+        * jit/CallFrameShuffler64.cpp:
+        * jit/JITOperations.cpp:
+        * llint/LLIntSlowPaths.cpp:
+        (JSC::LLInt::LLINT_SLOW_PATH_DECL):
+        * runtime/ClassInfo.h:
+        (JSC::ClassInfo::hasStaticProperties):
+        * runtime/ConsoleClient.cpp:
+        * runtime/CustomGetterSetter.h:
+        * runtime/ErrorInstance.cpp:
+        (JSC::ErrorInstance::finishCreation):
+        (JSC::addErrorInfoAndGetBytecodeOffset): Deleted.
+        * runtime/GetterSetter.h:
+        (JSC::asGetterSetter):
+        * runtime/JSCInlines.h:
+        * runtime/JSCJSValue.h:
+        * runtime/JSCJSValueInlines.h:
+        (JSC::JSValue::put):
+        (JSC::JSValue::putInternal):
+        (JSC::JSValue::putByIndex):
+        * runtime/JSObject.cpp:
+        (JSC::JSObject::put):
+        (JSC::JSObject::putByIndex):
+        * runtime/JSObject.h:
+        (JSC::JSObject::getVectorLength):
+        (JSC::JSObject::inlineGetOwnPropertySlot):
+        (JSC::JSObject::get):
+        (JSC::JSObject::putDirectInternal):
+
+2015-12-16  Filip Pizlo  <fpizlo@apple.com>
+
+        Work around a bug in LLVM by flipping the unification order
+        https://bugs.webkit.org/show_bug.cgi?id=152341
+        rdar://problem/23920749
+
+        Reviewed by Mark Lam.
+
+        * dfg/DFGUnificationPhase.cpp:
+        (JSC::DFG::UnificationPhase::run):
+
+2015-12-16  Saam barati  <sbarati@apple.com>
+
+        Add "explicit operator bool" to ScratchRegisterAllocator::PreservedState
+        https://bugs.webkit.org/show_bug.cgi?id=152337
+
+        Reviewed by Mark Lam.
+
+        If we have a default constructor, we should also have a way
+        to tell if a PreservedState is invalid.
+
+        * jit/ScratchRegisterAllocator.cpp:
+        (JSC::ScratchRegisterAllocator::preserveReusedRegistersByPushing):
+        (JSC::ScratchRegisterAllocator::restoreReusedRegistersByPopping):
+        * jit/ScratchRegisterAllocator.h:
+        (JSC::ScratchRegisterAllocator::PreservedState::PreservedState):
+        (JSC::ScratchRegisterAllocator::PreservedState::operator bool):
+
+2015-12-16  Caitlin Potter  <caitp@igalia.com>
+
+        [JSC] fix error message for eval/arguments CoverInitializedName in strict code
+        https://bugs.webkit.org/show_bug.cgi?id=152304
+
+        Reviewed by Darin Adler.
+
+        Because the error was originally classified as indicating a Pattern, the
+        error in AssignmentPattern parsing causes the reported message to revert to
+        the original Expression error message, which in this case is incorrect.
+
+        This change modifies the implementation of the strict code
+        error slightly, and reclassifies the error to prevent the message revert,
+        which improves the clarity of the message overall.
+
+        * parser/Parser.cpp:
+        (JSC::Parser<LexerType>::parseAssignmentElement):
+        (JSC::Parser<LexerType>::parseDestructuringPattern):
+        * parser/Parser.h:
+        (JSC::Parser::ExpressionErrorClassifier::reclassifyExpressionError):
+        (JSC::Parser::reclassifyExpressionError):
+        * tests/stress/destructuring-assignment-syntax.js:
+
+2015-12-16  Joseph Pecoraro  <pecoraro@apple.com>
+
+        Builtin source should be minified more
+        https://bugs.webkit.org/show_bug.cgi?id=152290
+
+        Reviewed by Darin Adler.
+
+        * Scripts/builtins/builtins_model.py:
+        (BuiltinFunction.fromString):
+        Remove primarily empty lines that would just introduce clutter.
+        We only do the minification in non-Debug configurations, which
+        is determined by the CONFIGURATION environment variable. You can
+        see how tests would generate differently, like so:
+        shell> CONFIGURATION=Release ./Tools/Scripts/run-builtins-generator-tests
+
+2015-12-16  Commit Queue  <commit-queue@webkit.org>
+
+        Unreviewed, rolling out r194135.
+        https://bugs.webkit.org/show_bug.cgi?id=152333
+
+        due to missing OSR exit materialization support in FTL
+        (Requested by yusukesuzuki on #webkit).
+
+        Reverted changeset:
+
+        "[ES6] Handle new_generator_func / new_generator_func_exp in
+        DFG / FTL"
+        https://bugs.webkit.org/show_bug.cgi?id=152227
+        http://trac.webkit.org/changeset/194135
+
+2015-12-16  Youenn Fablet  <youenn.fablet@crf.canon.fr>
+
+        [Fetch API] Add fetch API compile time flag
+        https://bugs.webkit.org/show_bug.cgi?id=152254
+
+        Reviewed by Darin Adler.
+
+        * Configurations/FeatureDefines.xcconfig:
+
+2015-12-16  Yusuke Suzuki  <utatane.tea@gmail.com>
+
+        [ES6] Handle new_generator_func / new_generator_func_exp in DFG / FTL
+        https://bugs.webkit.org/show_bug.cgi?id=152227
+
+        Reviewed by Saam Barati.
+
+        This patch introduces new_generator_func / new_generator_func_exp into DFG and FTL.
+        We add a new DFG Node, NewGeneratorFunction. It will construct a function with GeneratorFunction's structure.
+        The structure of GeneratorFunction is different from one of Function because GeneratorFunction has the different __proto__.
+
+        * dfg/DFGAbstractInterpreterInlines.h:
+        (JSC::DFG::AbstractInterpreter<AbstractStateType>::executeEffects):
+        * dfg/DFGByteCodeParser.cpp:
+        (JSC::DFG::ByteCodeParser::parseBlock):
+        * dfg/DFGCapabilities.cpp:
+        (JSC::DFG::capabilityLevel):
+        * dfg/DFGClobberize.h:
+        (JSC::DFG::clobberize):
+        * dfg/DFGClobbersExitState.cpp:
+        (JSC::DFG::clobbersExitState):
+        * dfg/DFGDoesGC.cpp:
+        (JSC::DFG::doesGC):
+        * dfg/DFGFixupPhase.cpp:
+        (JSC::DFG::FixupPhase::fixupNode):
+        * dfg/DFGMayExit.cpp:
+        (JSC::DFG::mayExit):
+        * dfg/DFGNode.h:
+        (JSC::DFG::Node::convertToPhantomNewFunction):
+        (JSC::DFG::Node::hasCellOperand):
+        (JSC::DFG::Node::isFunctionAllocation):
+        * dfg/DFGNodeType.h:
+        * dfg/DFGObjectAllocationSinkingPhase.cpp:
+        * dfg/DFGPredictionPropagationPhase.cpp:
+        (JSC::DFG::PredictionPropagationPhase::propagate):
+        * dfg/DFGSafeToExecute.h:
+        (JSC::DFG::safeToExecute):
+        * dfg/DFGSpeculativeJIT.cpp:
+        (JSC::DFG::SpeculativeJIT::compileNewFunction):
+        * dfg/DFGSpeculativeJIT32_64.cpp:
+        (JSC::DFG::SpeculativeJIT::compile):
+        * dfg/DFGSpeculativeJIT64.cpp:
+        (JSC::DFG::SpeculativeJIT::compile):
+        * dfg/DFGStoreBarrierInsertionPhase.cpp:
+        * dfg/DFGStructureRegistrationPhase.cpp:
+        (JSC::DFG::StructureRegistrationPhase::run):
+        * ftl/FTLCapabilities.cpp:
+        (JSC::FTL::canCompile):
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileNode):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileNewFunction):
+        * tests/stress/generator-function-create-optimized.js: Added.
+        (shouldBe):
+        (g):
+        (test.return.gen):
+        (test):
+        (test2.gen):
+        (test2):
+        * tests/stress/generator-function-declaration-sinking-no-double-allocate.js: Added.
+        (shouldBe):
+        (GeneratorFunctionPrototype):
+        (call):
+        (f):
+        (sink):
+        * tests/stress/generator-function-declaration-sinking-osrexit.js: Added.
+        (shouldBe):
+        (GeneratorFunctionPrototype):
+        (g):
+        (f):
+        (sink):
+        * tests/stress/generator-function-declaration-sinking-put.js: Added.
+        (shouldBe):
+        (GeneratorFunctionPrototype):
+        (g):
+        (f):
+        (sink):
+        * tests/stress/generator-function-expression-sinking-no-double-allocate.js: Added.
+        (shouldBe):
+        (GeneratorFunctionPrototype):
+        (call):
+        (f):
+        (sink):
+        * tests/stress/generator-function-expression-sinking-osrexit.js: Added.
+        (shouldBe):
+        (GeneratorFunctionPrototype):
+        (g):
+        (sink):
+        * tests/stress/generator-function-expression-sinking-put.js: Added.
+        (shouldBe):
+        (GeneratorFunctionPrototype):
+        (g):
+        (sink):
+
+2015-12-15  Mark Lam  <mark.lam@apple.com>
+
+        Gardening: fix broken 32-bit JSC tests.  Just need to assign a scratch register.
+        https://bugs.webkit.org/show_bug.cgi?id=152191 
+
+        Not reviewed.
+
+        * jit/JITArithmetic.cpp:
+        (JSC::JIT::emitBitBinaryOpFastPath):
+
+2015-12-15  Mark Lam  <mark.lam@apple.com>
+
+        Introducing ScratchRegisterAllocator::PreservedState.
+        https://bugs.webkit.org/show_bug.cgi?id=152315
+
+        Reviewed by Geoffrey Garen.
+
+        restoreReusedRegistersByPopping() should always be called with 2 values that
+        matches the expectation of preserveReusedRegistersByPushing().  Those 2 values
+        are the number of bytes preserved and the ExtraStackSpace requirement.  By
+        encapsulating them in a ScratchRegisterAllocator::PreservedState, we can make
+        it less error prone when calling restoreReusedRegistersByPopping().  Now, we only
+        need to pass it the appropriate PreservedState that its matching
+        preserveReusedRegistersByPushing() returned.
+
+        * bytecode/PolymorphicAccess.cpp:
+        (JSC::AccessGenerationState::restoreScratch):
+        (JSC::AccessCase::generate):
+        (JSC::PolymorphicAccess::regenerate):
+        * bytecode/PolymorphicAccess.h:
+        (JSC::AccessGenerationState::AccessGenerationState):
+        * ftl/FTLCompileBinaryOp.cpp:
+        (JSC::FTL::generateBinaryBitOpFastPath):
+        (JSC::FTL::generateRightShiftFastPath):
+        (JSC::FTL::generateBinaryArithOpFastPath):
+        * ftl/FTLLazySlowPath.cpp:
+        (JSC::FTL::LazySlowPath::generate):
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::emitStoreBarrier):
+        * jit/ScratchRegisterAllocator.cpp:
+        (JSC::ScratchRegisterAllocator::allocateScratchGPR):
+        (JSC::ScratchRegisterAllocator::allocateScratchFPR):
+        (JSC::ScratchRegisterAllocator::preserveReusedRegistersByPushing):
+        (JSC::ScratchRegisterAllocator::restoreReusedRegistersByPopping):
+        * jit/ScratchRegisterAllocator.h:
+        (JSC::ScratchRegisterAllocator::usedRegisters):
+        (JSC::ScratchRegisterAllocator::PreservedState::PreservedState):
+
+2015-12-15  Mark Lam  <mark.lam@apple.com>
+
+        Polymorphic operand types for DFG and FTL bit operators.
+        https://bugs.webkit.org/show_bug.cgi?id=152191
+
+        Reviewed by Saam Barati.
+
+        * bytecode/SpeculatedType.h:
+        (JSC::isUntypedSpeculationForBitOps):
+        * dfg/DFGAbstractInterpreterInlines.h:
+        (JSC::DFG::AbstractInterpreter<AbstractStateType>::executeEffects):
+        * dfg/DFGNode.h:
+        (JSC::DFG::Node::shouldSpeculateUntypedForBitOps):
+        - Added check for types not supported by ValueToInt32, and therefore should be
+          treated as untyped for bitops.
+
+        * dfg/DFGClobberize.h:
+        (JSC::DFG::clobberize):
+        * dfg/DFGFixupPhase.cpp:
+        (JSC::DFG::FixupPhase::fixupNode):
+        - Handled untyped operands.
+
+        * dfg/DFGOperations.cpp:
+        * dfg/DFGOperations.h:
+        - Added DFG slow path functions for bitops.
+
+        * dfg/DFGSpeculativeJIT.cpp:
+        (JSC::DFG::SpeculativeJIT::emitUntypedBitOp):
+        (JSC::DFG::SpeculativeJIT::compileBitwiseOp):
+        (JSC::DFG::SpeculativeJIT::emitUntypedRightShiftBitOp):
+        (JSC::DFG::SpeculativeJIT::compileShiftOp):
+        * dfg/DFGSpeculativeJIT.h:
+        - Added DFG backend support untyped operands for bitops.
+
+        * dfg/DFGStrengthReductionPhase.cpp:
+        (JSC::DFG::StrengthReductionPhase::handleNode):
+        - Limit bitops strength reduction only to when we don't have untyped operands.
+          This is because values that are not int32s need to be converted to int32.
+          Without untyped operands, the ValueToInt32 node takes care of this.
+          With untyped operands, we cannot use ValueToInt32, and need to do the conversion
+          in the code emitted for the bitop node itself.  For example:
+
+              5.5 | 0; // yields 5 because ValueToInt32 converts the 5.5 to a 5.
+              "abc" | 0; // would yield "abc" instead of the expected 0 if we let
+                         // strength reduction do its thing.
+
+        * ftl/FTLCompileBinaryOp.cpp:
+        (JSC::FTL::generateBinaryBitOpFastPath):
+        (JSC::FTL::generateRightShiftFastPath):
+        (JSC::FTL::generateBinaryOpFastPath):
+
+        * ftl/FTLInlineCacheDescriptor.h:
+        (JSC::FTL::BitAndDescriptor::BitAndDescriptor):
+        (JSC::FTL::BitAndDescriptor::icSize):
+        (JSC::FTL::BitAndDescriptor::nodeType):
+        (JSC::FTL::BitAndDescriptor::opName):
+        (JSC::FTL::BitAndDescriptor::slowPathFunction):
+        (JSC::FTL::BitAndDescriptor::nonNumberSlowPathFunction):
+        (JSC::FTL::BitOrDescriptor::BitOrDescriptor):
+        (JSC::FTL::BitOrDescriptor::icSize):
+        (JSC::FTL::BitOrDescriptor::nodeType):
+        (JSC::FTL::BitOrDescriptor::opName):
+        (JSC::FTL::BitOrDescriptor::slowPathFunction):
+        (JSC::FTL::BitOrDescriptor::nonNumberSlowPathFunction):
+        (JSC::FTL::BitXorDescriptor::BitXorDescriptor):
+        (JSC::FTL::BitXorDescriptor::icSize):
+        (JSC::FTL::BitXorDescriptor::nodeType):
+        (JSC::FTL::BitXorDescriptor::opName):
+        (JSC::FTL::BitXorDescriptor::slowPathFunction):
+        (JSC::FTL::BitXorDescriptor::nonNumberSlowPathFunction):
+        (JSC::FTL::BitLShiftDescriptor::BitLShiftDescriptor):
+        (JSC::FTL::BitLShiftDescriptor::icSize):
+        (JSC::FTL::BitLShiftDescriptor::nodeType):
+        (JSC::FTL::BitLShiftDescriptor::opName):
+        (JSC::FTL::BitLShiftDescriptor::slowPathFunction):
+        (JSC::FTL::BitLShiftDescriptor::nonNumberSlowPathFunction):
+        (JSC::FTL::BitRShiftDescriptor::BitRShiftDescriptor):
+        (JSC::FTL::BitRShiftDescriptor::icSize):
+        (JSC::FTL::BitRShiftDescriptor::nodeType):
+        (JSC::FTL::BitRShiftDescriptor::opName):
+        (JSC::FTL::BitRShiftDescriptor::slowPathFunction):
+        (JSC::FTL::BitRShiftDescriptor::nonNumberSlowPathFunction):
+        (JSC::FTL::BitURShiftDescriptor::BitURShiftDescriptor):
+        (JSC::FTL::BitURShiftDescriptor::icSize):
+        (JSC::FTL::BitURShiftDescriptor::nodeType):
+        (JSC::FTL::BitURShiftDescriptor::opName):
+        (JSC::FTL::BitURShiftDescriptor::slowPathFunction):
+        (JSC::FTL::BitURShiftDescriptor::nonNumberSlowPathFunction):
+        - Added support for bitop ICs.
+
+        * ftl/FTLInlineCacheSize.cpp:
+        (JSC::FTL::sizeOfBitAnd):
+        (JSC::FTL::sizeOfBitOr):
+        (JSC::FTL::sizeOfBitXor):
+        (JSC::FTL::sizeOfBitLShift):
+        (JSC::FTL::sizeOfBitRShift):
+        (JSC::FTL::sizeOfBitURShift):
+        * ftl/FTLInlineCacheSize.h:
+        - Added new bitop IC sizes.  These are just estimates for now that work adequately,
+          and are shown to not impact performance on benchmarks.  We will re-tune these
+          sizes values later in another patch once all snippet ICs have been added.
+
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileBitAnd):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileBitOr):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileBitXor):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileBitRShift):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileBitLShift):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileBitURShift):
+        - Added support for bitop ICs.
+
+        * jit/JITLeftShiftGenerator.cpp:
+        (JSC::JITLeftShiftGenerator::generateFastPath):
+        * jit/JITLeftShiftGenerator.h:
+        (JSC::JITLeftShiftGenerator::JITLeftShiftGenerator):
+        * jit/JITRightShiftGenerator.cpp:
+        (JSC::JITRightShiftGenerator::generateFastPath):
+        - The shift MASM operatons need to ensure that the shiftAmount is not in the same
+          register as the destination register.  With the baselineJIT and DFG, this is
+          ensured in how we allocate these registers, and hence, the bug does not manifest.
+          With the FTL, these registers are not guaranteed to be unique.  Hence, we need
+          to fix the shift op snippet code to compensate for this. 
+
+2015-12-15  Caitlin Potter  <caitp@igalia.com>
+
+        [JSC] SyntaxError if AssignmentElement is `eval` or `arguments` in strict code
+        https://bugs.webkit.org/show_bug.cgi?id=152302
+
+        Reviewed by Mark Lam.
+
+        `eval` and `arguments` must not be assigned to in strict code. This
+        change fixes `language/expressions/assignment/destructuring/obj-id-simple-strict.js`
+        in Test262, as well as a variety of other similar tests.
+
+        * parser/Parser.cpp:
+        (JSC::Parser<LexerType>::parseAssignmentElement):
+        (JSC::Parser<LexerType>::parseDestructuringPattern):
+        * tests/stress/destructuring-assignment-syntax.js:
+
+2015-12-15  Csaba Osztrogonác  <ossy@webkit.org>
+
+        URTBF after 194062.
+
+        * assembler/MacroAssemblerARM.h:
+        (JSC::MacroAssemblerARM::supportsFloatingPointCeil): Added.
+        (JSC::MacroAssemblerARM::ceilDouble): Added.
+
+2015-12-14  Filip Pizlo  <fpizlo@apple.com>
+
+        FTL B3 should account for localsOffset
+        https://bugs.webkit.org/show_bug.cgi?id=152288
+
+        Reviewed by Saam Barati.
+
+        The DFG will build up some data structures that expect to know about offsets from FP. Those data
+        structures may slide by some offset when the low-level compiler (either LLVM or B3) does stack
+        allocation. So, the LLVM FTL modifies those data structures based on the real offset that it gets
+        from LLVM's stackmaps. The B3 code needs to do the same.
+
+        I had previously vowed to never put more stuff into FTLB3Compile.cpp, because I didn't want it to
+        look like FTLCompile.cpp. Up until now, I was successful because I used lambdas installed by
+        FTLLower. But in this case, I actually think that having code that just does this explicitly in
+        FTLB3Compile.cpp is least confusing. There is no particular place in FTLLower that would want to
+        care about this, and we need to ensure that we do this fixup before we run any of the stackmap
+        generators. In other words, it needs to happen before we call B3::generate(). The ordering
+        constraints seem like a good reason to have this done explicitly rather than through lambdas.
+
+        I wrote a test. The test was failing in trunk because the B3 meaning of anchor().value() is
+        different from the LLVM meaning. This caused breakage when we used this idiom:
+
+            ValueFromBlock foo = m_out.anchor(things);
+            ...(foo.value()) // we were expecting that foo.value() == things
+
+        I never liked this idiom to begin with, so instead of trying to change B3's anchor(), I changed
+        the idiom to:
+
+            LValue fooValue = things;
+            ValueFromBlock foo = m_out.anchor(fooValue);
+            ...(fooValue)
+
+        This is probably a good idea, since eventually we want B3's anchor() to just return the
+        UpsilonValue*. To get there, we want to eliminate any situations where code assumes that
+        ValueFromBlock is an actual object and not just a typedef for a pointer.
+
+        * ftl/FTLB3Compile.cpp:
+        (JSC::FTL::compile):
+        * ftl/FTLB3Output.cpp:
+        (JSC::FTL::Output::appendTo):
+        (JSC::FTL::Output::lockedStackSlot):
+        * ftl/FTLB3Output.h:
+        (JSC::FTL::Output::framePointer):
+        (JSC::FTL::Output::constBool):
+        (JSC::FTL::Output::constInt32):
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::lower):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileGetIndexedPropertyStorage):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileGetByVal):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileCreateDirectArguments):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileStringCharAt):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileForwardVarargs):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileHasIndexedProperty):
+        (JSC::FTL::DFG::LowerDFGToLLVM::allocateJSArray):
+        (JSC::FTL::DFG::LowerDFGToLLVM::sensibleDoubleToInt32):
+        * ftl/FTLState.h:
+        (JSC::FTL::verboseCompilationEnabled):
+        * tests/stress/ftl-function-dot-arguments-with-callee-saves.js: Added.
+
+2015-12-14  Yusuke Suzuki  <utatane.tea@gmail.com>
+
+        Math.random should have an intrinsic thunk and it should be later handled as a DFG Node
+        https://bugs.webkit.org/show_bug.cgi?id=152133
+
+        Reviewed by Geoffrey Garen.
+
+        In this patch, we implement new RandomIntrinsic. It emits a machine code to generate random numbers efficiently.
+        And later it will be recognized by DFG and converted to ArithRandom node.
+        It provides type information SpecDoubleReal since Math.random only generates a number within [0, 1.0).
+
+        Currently, only 64bit version is supported. On 32bit environment, ArithRandom will be converted to callOperation.
+        While it emits a function call, ArithRandom node on 32bit still represents SpecDoubleReal as a result type.
+
+        * dfg/DFGAbstractHeap.h:
+        * dfg/DFGAbstractInterpreterInlines.h:
+        (JSC::DFG::AbstractInterpreter<AbstractStateType>::executeEffects):
+        * dfg/DFGByteCodeParser.cpp:
+        (JSC::DFG::ByteCodeParser::handleIntrinsicCall):
+        * dfg/DFGClobberize.h:
+        (JSC::DFG::clobberize):
+        * dfg/DFGDoesGC.cpp:
+        (JSC::DFG::doesGC):
+        * dfg/DFGFixupPhase.cpp:
+        (JSC::DFG::FixupPhase::fixupNode):
+        * dfg/DFGNodeType.h:
+        * dfg/DFGOperations.cpp:
+        * dfg/DFGOperations.h:
+        * dfg/DFGPredictionPropagationPhase.cpp:
+        (JSC::DFG::PredictionPropagationPhase::propagate):
+        * dfg/DFGSafeToExecute.h:
+        (JSC::DFG::safeToExecute):
+        * dfg/DFGSpeculativeJIT.h:
+        (JSC::DFG::SpeculativeJIT::callOperation):
+        * dfg/DFGSpeculativeJIT32_64.cpp:
+        (JSC::DFG::SpeculativeJIT::compile):
+        (JSC::DFG::SpeculativeJIT::compileArithRandom):
+        * dfg/DFGSpeculativeJIT64.cpp:
+        (JSC::DFG::SpeculativeJIT::compile):
+        (JSC::DFG::SpeculativeJIT::compileArithRandom):
+        * ftl/FTLCapabilities.cpp:
+        (JSC::FTL::canCompile):
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileNode):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileArithRandom):
+        * jit/AssemblyHelpers.cpp:
+        (JSC::emitRandomThunkImpl):
+        (JSC::AssemblyHelpers::emitRandomThunk):
+        * jit/AssemblyHelpers.h:
+        * jit/JITOperations.h:
+        * jit/ThunkGenerators.cpp:
+        (JSC::randomThunkGenerator):
+        * jit/ThunkGenerators.h:
+        * runtime/Intrinsic.h:
+        * runtime/JSGlobalObject.h:
+        (JSC::JSGlobalObject::weakRandomOffset):
+        * runtime/MathObject.cpp:
+        (JSC::MathObject::finishCreation):
+        * runtime/VM.cpp:
+        (JSC::thunkGeneratorForIntrinsic):
+        * tests/stress/random-53bit.js: Added.
+        (test):
+        * tests/stress/random-in-range.js: Added.
+        (test):
+
+2015-12-14  Benjamin Poulain  <benjamin@webkit.org>
+
+        Rename FTL::Output's ceil64() to doubleCeil()
+
+        Rubber-stamped by Filip Pizlo.
+
+        ceil64() was a bad name, that's the name convention we use for integers.
+
+        * ftl/FTLB3Output.h:
+        (JSC::FTL::Output::doubleCeil):
+        (JSC::FTL::Output::ceil64): Deleted.
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileArithRound):
+
+2015-12-14  Filip Pizlo  <fpizlo@apple.com>
+
+        FTL B3 should be able to run n-body.js
+        https://bugs.webkit.org/show_bug.cgi?id=152281
+
+        Reviewed by Benjamin Poulain.
+
+        Fix a bug where m_captured was pointing to the start of the captured vars slot rather than the
+        end, like the rest of the FTL expected.
+
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::lower):
+
+2015-12-14  Benjamin Poulain  <bpoulain@apple.com>
+
+        Fix bad copy-paste in r194062
+
+        * ftl/FTLB3Output.h:
+        (JSC::FTL::Output::ceil64):
+
+2015-12-14  Filip Pizlo  <fpizlo@apple.com>
+
+        Unreviewed, fix cloop build.
+
+        * jit/GPRInfo.cpp:
+
+2015-12-14  Filip Pizlo  <fpizlo@apple.com>
+
+        FTL B3 should do PutById
+        https://bugs.webkit.org/show_bug.cgi?id=152268
+
+        Reviewed by Saam Barati.
+
+        * CMakeLists.txt:
+        * JavaScriptCore.xcodeproj/project.pbxproj:
+        * b3/B3LowerToAir.cpp:
+        (JSC::B3::Air::LowerToAir::createGenericCompare): I realized that we were missing some useful matching rules.
+        * b3/testb3.cpp: Added a bunch of tests.
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::compilePutById): Do the things.
+        * jit/GPRInfo.cpp: Added. I had to do this yucky thing because clang was having issues compiling references to this from deeply nested lambdas.
+        * jit/GPRInfo.h: Added a comment about how patchpointScratchRegister is bizarre and should probably die.
+
+2015-12-14  Benjamin Poulain  <bpoulain@apple.com>
+
+        [JSC] Add ceil() support for x86 and expose it to B3
+        https://bugs.webkit.org/show_bug.cgi?id=152231
+
+        Reviewed by Geoffrey Garen.
+
+        Most x86 CPUs we care about support ceil() natively
+        with the round instruction.
+
+        This patch expose that behind a runtime flag, use it
+        in the Math.ceil() thunk and expose it to B3.
+
+        * assembler/MacroAssemblerARM64.h:
+        (JSC::MacroAssemblerARM64::supportsFloatingPointCeil):
+        * assembler/MacroAssemblerARMv7.h:
+        (JSC::MacroAssemblerARMv7::supportsFloatingPointCeil):
+        * assembler/MacroAssemblerMIPS.h:
+        (JSC::MacroAssemblerMIPS::supportsFloatingPointCeil):
+        * assembler/MacroAssemblerSH4.h:
+        (JSC::MacroAssemblerSH4::supportsFloatingPointCeil):
+        * assembler/MacroAssemblerX86Common.cpp:
+        * assembler/MacroAssemblerX86Common.h:
+        (JSC::MacroAssemblerX86Common::ceilDouble):
+        (JSC::MacroAssemblerX86Common::ceilFloat):
+        (JSC::MacroAssemblerX86Common::supportsFloatingPointCeil):
+        (JSC::MacroAssemblerX86Common::supportsLZCNT):
+        * assembler/X86Assembler.h:
+        (JSC::X86Assembler::roundss_rr):
+        (JSC::X86Assembler::roundss_mr):
+        (JSC::X86Assembler::roundsd_rr):
+        (JSC::X86Assembler::roundsd_mr):
+        (JSC::X86Assembler::mfence):
+        (JSC::X86Assembler::X86InstructionFormatter::threeByteOp):
+        * b3/B3ConstDoubleValue.cpp:
+        (JSC::B3::ConstDoubleValue::ceilConstant):
+        * b3/B3ConstDoubleValue.h:
+        * b3/B3ConstFloatValue.cpp:
+        (JSC::B3::ConstFloatValue::ceilConstant):
+        * b3/B3ConstFloatValue.h:
+        * b3/B3LowerMacrosAfterOptimizations.cpp:
+        * b3/B3LowerToAir.cpp:
+        (JSC::B3::Air::LowerToAir::lower):
+        * b3/B3Opcode.cpp:
+        (WTF::printInternal):
+        * b3/B3Opcode.h:
+        * b3/B3ReduceDoubleToFloat.cpp:
+        * b3/B3ReduceStrength.cpp:
+        * b3/B3Validate.cpp:
+        * b3/B3Value.cpp:
+        (JSC::B3::Value::ceilConstant):
+        (JSC::B3::Value::effects):
+        (JSC::B3::Value::key):
+        (JSC::B3::Value::typeFor):
+        * b3/B3Value.h:
+        * b3/air/AirOpcode.opcodes:
+        * b3/testb3.cpp:
+        (JSC::B3::testCeilArg):
+        (JSC::B3::testCeilImm):
+        (JSC::B3::testCeilMem):
+        (JSC::B3::testCeilCeilArg):
+        (JSC::B3::testCeilIToD64):
+        (JSC::B3::testCeilIToD32):
+        (JSC::B3::testCeilArgWithUselessDoubleConversion):
+        (JSC::B3::testCeilArgWithEffectfulDoubleConversion):
+        (JSC::B3::populateWithInterestingValues):
+        (JSC::B3::run):
+        * ftl/FTLB3Output.h:
+        (JSC::FTL::Output::ceil64):
+        * jit/ThunkGenerators.cpp:
+        (JSC::ceilThunkGenerator):
+
+2015-12-14  Andreas Kling  <akling@apple.com>
+
+        ResourceUsageOverlay should show GC timers.
+        <https://webkit.org/b/152151>
+
+        Reviewed by Darin Adler.
+
+        Expose the next fire time (in WTF timestamp style) of a GCActivityCallback.
+
+        * heap/GCActivityCallback.cpp:
+        (JSC::GCActivityCallback::scheduleTimer):
+        (JSC::GCActivityCallback::cancelTimer):
+        * heap/GCActivityCallback.h:
+
+2015-12-14  Filip Pizlo  <fpizlo@apple.com>
+
+        Unreviewed, fix merge issue in a test.
+
+        * b3/testb3.cpp:
+        (JSC::B3::testCheckTwoMegaCombos):
+        (JSC::B3::testCheckTwoNonRedundantMegaCombos):
+
+2015-12-14  Filip Pizlo  <fpizlo@apple.com>
+
+        B3 should not give ValueReps for the non-stackmap children of a CheckValue to the generator callback
+        https://bugs.webkit.org/show_bug.cgi?id=152224
+
+        Reviewed by Geoffrey Garen.
+
+        Previously, a stackmap generator for a Check had to know how many children the B3 value for the
+        Check had at the time of code generation. That meant that B3 could not change the kind of Check
+        that it was - for example it cannot turn a Check into a Patchpoint and it cannot turn a CheckAdd
+        into a Check. But just changing the contract so that the stackmap generation params only get the
+        stackmap children of the check means that B3 can transform Checks as it likes.
+
+        This is meant to aid sinking values into checks.
+
+        Also, I found that the effects of a Check did not include HeapRange::top(). I think it's best if
+        exitsSideways does not imply reading top, the way that it does in DFG. In the DFG, that makes
+        sense because the exit analysis is orthogonal, so the clobber analysis tells you about the reads
+        not counting OSR exit - if you need to you can conditionally merge that with World based on a
+        separate exit analysis. But in B3, the Effects object tells you about both exiting and reading,
+        and it's computed by one analysis. Prior to this change, Check was not setting reads to top() so
+        we were effectively saying that Effects::reads is meaningless when exitsSideways is true. It
+        seems more sensible to instead force the analysis to set reads to top() when setting
+        exitsSideways to true, not least because we only have one such analysis and many users. But it
+        also makes sense for another reason: it allows us to bound the set of things that the program
+        will read after it exits. That might not be useful to us now, but it's a nice feature to get for
+        free. I've seen language features that have behave like exitsSideways that don't also read top,
+        like an array bounds check that causes sudden termination without making any promises about how
+        pretty the crash dump will look.
+
+        * b3/B3CheckSpecial.cpp:
+        (JSC::B3::CheckSpecial::generate):
+        * b3/B3Opcode.h:
+        * b3/B3Value.cpp:
+        (JSC::B3::Value::effects):
+        * b3/testb3.cpp:
+        (JSC::B3::testSimpleCheck):
+        (JSC::B3::testCheckLessThan):
+        (JSC::B3::testCheckMegaCombo):
+        (JSC::B3::testCheckAddImm):
+        (JSC::B3::testCheckAddImmCommute):
+        (JSC::B3::testCheckAddImmSomeRegister):
+        (JSC::B3::testCheckAdd):
+        (JSC::B3::testCheckAdd64):
+        (JSC::B3::testCheckSubImm):
+        (JSC::B3::testCheckSubBadImm):
+        (JSC::B3::testCheckSub):
+        (JSC::B3::testCheckSub64):
+        (JSC::B3::testCheckNeg):
+        (JSC::B3::testCheckNeg64):
+        (JSC::B3::testCheckMul):
+        (JSC::B3::testCheckMulMemory):
+        (JSC::B3::testCheckMul2):
+        (JSC::B3::testCheckMul64):
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::blessSpeculation):
+
+2015-12-14  Filip Pizlo  <fpizlo@apple.com>
+
+        Air: Support Architecture-specific forms and Opcodes
+        https://bugs.webkit.org/show_bug.cgi?id=151736
+
+        Reviewed by Benjamin Poulain.
+
+        This adds really awesome architecture selection to the AirOpcode.opcodes file. If an opcode or
+        opcode form is unavailable on some architecture, you can still mention its name in C++ code (it'll
+        still be a member of the enum) but isValidForm() and all other reflective queries will tell you
+        that it doesn't exist. This will make the instruction selector steer clear of it, and it will
+        also ensure that the spiller doesn't try to use any unavailable architecture-specific address
+        forms.
+
+        The new capability is documented extensively in a comment in AirOpcode.opcodes.
+
+        * b3/air/AirOpcode.opcodes:
+        * b3/air/opcode_generator.rb:
+
+2015-12-14  Mark Lam  <mark.lam@apple.com>
+
+        Misc. small fixes in snippet related code.
+        https://bugs.webkit.org/show_bug.cgi?id=152259
+
+        Reviewed by Saam Barati.
+
+        * dfg/DFGSpeculativeJIT.cpp:
+        (JSC::DFG::SpeculativeJIT::compileArithMul):
+        - When loading a constant JSValue for a node, use the one that the node already
+          provides instead of reconstructing it.  This is not a bug, but the fix makes
+          the code cleaner.
+
+        * jit/JITBitAndGenerator.cpp:
+        (JSC::JITBitAndGenerator::generateFastPath):
+        - No need to do a bitand with a constant int 0xffffffff operand.
+
+        * jit/JITBitOrGenerator.cpp:
+        (JSC::JITBitOrGenerator::generateFastPath):
+        - Fix comments: bitor is '|', not '&'.
+        - No need to do a bitor with a constant int 0 operand.
+
+        * jit/JITBitXorGenerator.cpp:
+        (JSC::JITBitXorGenerator::generateFastPath):
+        - Fix comments: bitxor is '^', not '&'.
+
+        * jit/JITRightShiftGenerator.cpp:
+        (JSC::JITRightShiftGenerator::generateFastPath):
+        - Renamed a jump target name to be clearer about its purpose.
+
+2015-12-14  Mark Lam  <mark.lam@apple.com>
+
+        We should not employ the snippet code in the DFG if no OSR exit was previously encountered.
+        https://bugs.webkit.org/show_bug.cgi?id=152255
+
+        Reviewed by Saam Barati.
+
+        * dfg/DFGFixupPhase.cpp:
+        (JSC::DFG::FixupPhase::fixupNode):
+
+2015-12-14  Filip Pizlo  <fpizlo@apple.com>
+
+        B3->Air compare-branch fusion should fuse even if the result of the comparison is used more than once
+        https://bugs.webkit.org/show_bug.cgi?id=152198
+
+        Reviewed by Benjamin Poulain.
+
+        If we have a comparison operation that is branched on from multiple places, then we were
+        previously executing the comparison to get a boolean result in a register and then we were
+        testing/branching on that register in multiple places. This is actually less efficient than
+        just fusing the compare/branch multiple times, even though this means that the comparison
+        executes multiple times. This would only be bad if the comparison fused loads multiple times,
+        since duplicating loads is both wrong and inefficient. So, this adds the notion of sharing to
+        compare/branch fusion. If a compare is shared by multiple branches, then we refuse to fuse
+        the load.
+
+        To write the test, I needed to zero-extend 8 to 32. In the process of thinking about how to
+        do this, I realized that we needed lowerings for SExt8/SExt16. And I realized that the
+        lowerings for the other extension operations were not fully fleshed out; for example they
+        were incapable of load fusion. This patch fixes this and also adds some smart strength
+        reductions for BitAnd(@x, 0xff/0xffff/0xffffffff) - all of which should be lowered to a zero
+        extension.
+
+        This is a big win on asm.js code. It's not enough to bridge the gap to LLVM, but it's a huge
+        step in that direction.
+
+        * assembler/MacroAssemblerX86Common.h:
+        (JSC::MacroAssemblerX86Common::load8SignedExtendTo32):
+        (JSC::MacroAssemblerX86Common::zeroExtend8To32):
+        (JSC::MacroAssemblerX86Common::signExtend8To32):
+        (JSC::MacroAssemblerX86Common::load16):
+        (JSC::MacroAssemblerX86Common::load16SignedExtendTo32):
+        (JSC::MacroAssemblerX86Common::zeroExtend16To32):
+        (JSC::MacroAssemblerX86Common::signExtend16To32):
+        (JSC::MacroAssemblerX86Common::store32WithAddressOffsetPatch):
+        * assembler/X86Assembler.h:
+        (JSC::X86Assembler::movzbl_rr):
+        (JSC::X86Assembler::movsbl_rr):
+        (JSC::X86Assembler::movzwl_rr):
+        (JSC::X86Assembler::movswl_rr):
+        (JSC::X86Assembler::cmovl_rr):
+        * b3/B3LowerToAir.cpp:
+        (JSC::B3::Air::LowerToAir::createGenericCompare):
+        (JSC::B3::Air::LowerToAir::lower):
+        * b3/B3ReduceStrength.cpp:
+        * b3/air/AirOpcode.opcodes:
+        * b3/testb3.cpp:
+        (JSC::B3::testCheckMegaCombo):
+        (JSC::B3::testCheckTwoMegaCombos):
+        (JSC::B3::testCheckTwoNonRedundantMegaCombos):
+        (JSC::B3::testCheckAddImm):
+        (JSC::B3::testTruncSExt32):
+        (JSC::B3::testSExt8):
+        (JSC::B3::testSExt8Fold):
+        (JSC::B3::testSExt8SExt8):
+        (JSC::B3::testSExt8SExt16):
+        (JSC::B3::testSExt8BitAnd):
+        (JSC::B3::testBitAndSExt8):
+        (JSC::B3::testSExt16):
+        (JSC::B3::testSExt16Fold):
+        (JSC::B3::testSExt16SExt16):
+        (JSC::B3::testSExt16SExt8):
+        (JSC::B3::testSExt16BitAnd):
+        (JSC::B3::testBitAndSExt16):
+        (JSC::B3::testSExt32BitAnd):
+        (JSC::B3::testBitAndSExt32):
+        (JSC::B3::testBasicSelect):
+        (JSC::B3::run):
+
+2015-12-14  Chris Dumez  <cdumez@apple.com>
+
+        Roll out r193974 and follow-up fixes as it caused JSC crashes
+        https://bugs.webkit.org/show_bug.cgi?id=152256
+
+        Unreviewed, Roll out r193974 and follow-up fixes as it caused JSC crashes.
+
+        * API/JSCallbackObject.h:
+        * builtins/FunctionPrototype.js:
+        * bytecode/BytecodeBasicBlock.cpp:
+        (JSC::isBranch):
+        * bytecode/BytecodeList.json:
+        * bytecode/BytecodeUseDef.h:
+        (JSC::computeUsesForBytecodeOffset):
+        (JSC::computeDefsForBytecodeOffset):
+        * bytecode/CodeBlock.cpp:
+        (JSC::CodeBlock::dumpBytecode):
+        * bytecode/ExitKind.cpp:
+        (JSC::exitKindToString): Deleted.
+        * bytecode/ExitKind.h:
+        * bytecode/PreciseJumpTargets.cpp:
+        (JSC::getJumpTargetsForBytecodeOffset):
+        * bytecompiler/BytecodeGenerator.cpp:
+        (JSC::BytecodeGenerator::emitCheckHasInstance):
+        (JSC::BytecodeGenerator::emitGetById): Deleted.
+        * bytecompiler/BytecodeGenerator.h:
+        (JSC::BytecodeGenerator::emitTypeOf): Deleted.
+        * bytecompiler/NodesCodegen.cpp:
+        (JSC::InstanceOfNode::emitBytecode):
+        (JSC::LogicalOpNode::emitBytecode): Deleted.
+        (JSC::LogicalOpNode::emitBytecodeInConditionContext): Deleted.
+        * dfg/DFGAbstractInterpreterInlines.h:
+        (JSC::DFG::AbstractInterpreter<AbstractStateType>::executeEffects):
+        * dfg/DFGByteCodeParser.cpp:
+        (JSC::DFG::ByteCodeParser::parseBlock):
+        * dfg/DFGCapabilities.cpp:
+        (JSC::DFG::capabilityLevel):
+        * dfg/DFGClobberize.h:
+        (JSC::DFG::clobberize):
+        * dfg/DFGDoesGC.cpp:
+        (JSC::DFG::doesGC):
+        * dfg/DFGFixupPhase.cpp:
+        (JSC::DFG::FixupPhase::fixupNode):
+        * dfg/DFGHeapLocation.cpp:
+        (WTF::printInternal):
+        * dfg/DFGHeapLocation.h:
+        * dfg/DFGNode.h:
+        (JSC::DFG::Node::hasCellOperand): Deleted.
+        (JSC::DFG::Node::hasTransition): Deleted.
+        * dfg/DFGNodeType.h:
+        * dfg/DFGPredictionPropagationPhase.cpp:
+        (JSC::DFG::PredictionPropagationPhase::propagate):
+        * dfg/DFGSafeToExecute.h:
+        (JSC::DFG::safeToExecute):
+        * dfg/DFGSpeculativeJIT.cpp:
+        (JSC::DFG::SpeculativeJIT::compileInstanceOf): Deleted.
+        (JSC::DFG::SpeculativeJIT::compileArithAdd): Deleted.
+        * dfg/DFGSpeculativeJIT.h:
+        (JSC::DFG::SpeculativeJIT::callOperation): Deleted.
+        * dfg/DFGSpeculativeJIT32_64.cpp:
+        (JSC::DFG::SpeculativeJIT::compile):
+        * dfg/DFGSpeculativeJIT64.cpp:
+        (JSC::DFG::SpeculativeJIT::compile):
+        * ftl/FTLCapabilities.cpp:
+        (JSC::FTL::canCompile):
+        * ftl/FTLIntrinsicRepository.h:
+        * ftl/FTLLowerDFGToLLVM.cpp:
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileNode):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileCheckHasInstance):
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileInstanceOf): Deleted.
+        (JSC::FTL::DFG::LowerDFGToLLVM::compileHasIndexedProperty): Deleted.
+        * jit/CCallHelpers.h:
+        (JSC::CCallHelpers::setupArguments): Deleted.
+        (JSC::CCallHelpers::setupArgumentsWithExecState): Deleted.
+        * jit/JIT.cpp:
+        (JSC::JIT::privateCompileMainPass):
+        (JSC::JIT::privateCompileSlowCases):
+        * jit/JIT.h:
+        * jit/JITInlines.h:
+        (JSC::JIT::callOperationNoExceptionCheck): Deleted.
+        (JSC::JIT::callOperation): Deleted.
+        * jit/JITOpcodes.cpp:
+        (JSC::JIT::emit_op_check_has_instance):
+        (JSC::JIT::emit_op_instanceof):
+        (JSC::JIT::emitSlow_op_check_has_instance):
+        (JSC::JIT::emitSlow_op_instanceof):
+        (JSC::JIT::emit_op_is_undefined): Deleted.
+        (JSC::JIT::emitSlow_op_to_number): Deleted.
+        (JSC::JIT::emitSlow_op_to_string): Deleted.
+        * jit/JITOpcodes32_64.cpp:
+        (JSC::JIT::emit_op_check_has_instance):
+        (JSC::JIT::emit_op_instanceof):
+        (JSC::JIT::emitSlow_op_check_has_instance):
+        (JSC::JIT::emitSlow_op_instanceof):
+        (JSC::JIT::emit_op_is_undefined): Deleted.
+        * jit/JITOperations.cpp:
+        * jit/JITOperations.h:
+        * llint/LLIntData.cpp:
+        (JSC::LLInt::Data::performAssertions): Deleted.
+        * llint/LLIntSlowPaths.cpp:
+        (JSC::LLInt::LLINT_SLOW_PATH_DECL):
+        * llint/LLIntSlowPaths.h:
+        * llint/LowLevelInterpreter32_64.asm:
+        * llint/LowLevelInterpreter64.asm:
+        * runtime/CommonIdentifiers.h:
+        * runtime/ExceptionHelpers.cpp:
+        (JSC::invalidParameterInstanceofSourceAppender):
+        (JSC::createInvalidInstanceofParameterError):
+        (JSC::createError): Deleted.
+        (JSC::createNotAFunctionError): Deleted.
+        (JSC::createNotAnObjectError): Deleted.
+        * runtime/ExceptionHelpers.h:
+        * runtime/FunctionPrototype.cpp:
+        (JSC::FunctionPrototype::addFunctionProperties):
+        * runtime/FunctionPrototype.h:
+        * runtime/JSBoundFunction.cpp:
+        (JSC::JSBoundFunction::create): Deleted.
+        (JSC::JSBoundFunction::customHasInstance): Deleted.
+        * runtime/JSBoundFunction.h:
+        * runtime/JSGlobalObject.cpp:
+        (JSC::JSGlobalObject::init):
+        (JSC::JSGlobalObject::visitChildren): Deleted.
+        * runtime/JSGlobalObject.h:
+        (JSC::JSGlobalObject::throwTypeErrorGetterSetter): Deleted.
+        * runtime/JSObject.cpp:
+        (JSC::JSObject::hasInstance):
+        (JSC::JSObject::defaultHasInstance): Deleted.
+        (JSC::JSObject::getPropertyNames): Deleted.
+        (JSC::JSObject::getOwnPropertyNames): Deleted.
+        * runtime/JSObject.h:
+        (JSC::JSFinalObject::create): Deleted.
+        * runtime/JSTypeInfo.h:
+        (JSC::TypeInfo::TypeInfo):
+        (JSC::TypeInfo::overridesHasInstance):
+        * runtime/WriteBarrier.h:
+        (JSC::WriteBarrierBase<Unknown>::slot):
+        * tests/es6.yaml:
+        * tests/stress/instanceof-custom-hasinstancesymbol.js: Removed.
+        * tests/stress/symbol-hasInstance.js: Removed.
+
+2015-12-13  Benjamin Poulain  <bpoulain@apple.com>
+
+        [JSC] Remove FTL::Output's doubleEqualOrUnordered()
+        https://bugs.webkit.org/show_bug.cgi?id=152234
+
+        Reviewed by Sam Weinig.
+
+        It is unused, one less thing to worry about.
+
+        * ftl/FTLB3Output.h:
+        (JSC::FTL::Output::doubleEqualOrUnordered): Deleted.
+        * ftl/FTLOutput.h:
+        (JSC::FTL::Output::doubleEqualOrUnordered): Deleted.
+
+2015-12-13  Yusuke Suzuki  <utatane.tea@gmail.com>
+
+        [JSC] Should not emit get_by_id for indexed property access
+        https://bugs.webkit.org/show_bug.cgi?id=151354
+
+        Reviewed by Darin Adler.
+
+        Before this patch, `a["1"]` is converted to `a.1` get_by_id operation in the bytecode compiler.
+        get_by_id emits IC. IC rely on the fact that Structure transition occur when adding / removing object's properties.
+        However, it's not true for indexed element properties. They are stored in the element storage and Structure transition does not occur.
+
+        For example, in the following case,
+
+             function getOne(a) { return a['1']; }
+
+             for (var i = 0; i < 36; ++i)
+                 getOne({2: true});
+
+             if (!getOne({1: true}))
+                 throw new Error("OUT");
+
+        In this case, `a['1']` creates get_by_id. `getOne({2: true})` calls makes getOne's get_by_id to create IC says that,
+        "when comming this structure chain, there is no property in "1", so we should return `undefined`".
+
+        After that, we call `getOne({1: true})`. But in this case, `{2: true}` and `{1: true}` have the same structure chain,
+        because indexed property addition does not occur structure transition.
+        So previous IC fast path is used and return `undefined`. But the correct answer is returning `true`.
+
+        This patch fixes the above issue. When there is string bracket access, we only emits get_by_id if the given string is not an index.
+        There are bugs in get_by_id, put_by_id, put_by_id (direct). But only get_by_id poses user observable issue.
+        Because in the put_by_id case, the generic path just says "this put is uncacheable".
+
+        * bytecompiler/BytecodeGenerator.cpp:
+        (JSC::BytecodeGenerator::emitGetById):
+        (JSC::BytecodeGenerator::emitPutById):
+        (JSC::BytecodeGenerator::emitDirectPutById):
+        * bytecompiler/NodesCodegen.cpp:
+        (JSC::isNonIndexStringElement):
+        (JSC::BracketAccessorNode::emitBytecode):
+        (JSC::FunctionCallBracketNode::emitBytecode):
+        (JSC::AssignBracketNode::emitBytecode):
+        (JSC::ObjectPatternNode::bindValue):
+        * tests/stress/element-property-get-should-not-handled-with-get-by-id.js: Added.
+        (getOne):
+
+2015-12-13  Andreas Kling  <akling@apple.com>
+
+        CachedScript could have a copy-free path for all-ASCII scripts.
+        <https://webkit.org/b/152203>
+
+        Reviewed by Antti Koivisto.
+
+        Make SourceProvider vend a StringView instead of a String.
+        This relaxes the promises that providers have to make about string lifetimes.
+
+        This means that on the WebCore side, CachedScript is free to cache a String
+        internally, while only ever exposing it as a temporary StringView.
+
+        A few extra copies (CPU, not memory) are introduced, none of them on hot paths.
+
+        * API/JSScriptRef.cpp:
+        * bytecode/CodeBlock.cpp:
+        (JSC::CodeBlock::sourceCodeForTools):
+        (JSC::CodeBlock::dumpSource):
+        * inspector/ScriptDebugServer.cpp:
+        (Inspector::ScriptDebugServer::dispatchDidParseSource):
+        (Inspector::ScriptDebugServer::dispatchFailedToParseSource):
+        * interpreter/Interpreter.cpp:
+        (JSC::Interpreter::execute):
+        * jsc.cpp:
+        (functionFindTypeForExpression):
+        (functionHasBasicBlockExecuted):
+        (functionBasicBlockExecutionCount):
+        * parser/Lexer.cpp:
+        (JSC::Lexer<T>::setCode):
+        * parser/Lexer.h:
+        (JSC::Lexer<LChar>::setCodeStart):
+        (JSC::Lexer<UChar>::setCodeStart):
+        * parser/Parser.h:
+        (JSC::Parser::getToken):
+        * parser/SourceCode.cpp:
+        (JSC::SourceCode::toUTF8):
+        * parser/SourceCode.h:
+        (JSC::SourceCode::hash):
+        (JSC::SourceCode::view):
+        (JSC::SourceCode::toString): Deleted.
+        * parser/SourceCodeKey.h:
+        (JSC::SourceCodeKey::SourceCodeKey):
+        (JSC::SourceCodeKey::string):
+        * parser/SourceProvider.h:
+        (JSC::SourceProvider::getRange):
+        * runtime/Completion.cpp:
+        (JSC::loadAndEvaluateModule):
+        (JSC::loadModule):
+        * runtime/ErrorInstance.cpp:
+        (JSC::appendSourceToError):
+        * runtime/FunctionPrototype.cpp:
+        (JSC::functionProtoFuncToString):
+        * tools/FunctionOverrides.cpp:
+        (JSC::initializeOverrideInfo):
+        (JSC::FunctionOverrides::initializeOverrideFor):
+
 2015-12-12  Benjamin Poulain  <benjamin@webkit.org>
 
         [JSC] Add lowering for B3's Store8 opcode
@@ -864,7 +3272,6 @@
         (JSC::ArrayPrototype::finishCreation):
         * runtime/CommonIdentifiers.h:
 
->>>>>>> .r193940
 2015-12-08  Filip Pizlo  <fpizlo@apple.com>
 
         FTL B3 should have basic GetById support

@@ -105,6 +105,12 @@ private:
         case BitRShift:
         case BitLShift:
         case BitURShift: {
+            if (Node::shouldSpeculateUntypedForBitOps(node->child1().node(), node->child2().node())
+                && m_graph.hasExitSite(node->origin.semantic, BadType)) {
+                fixEdge<UntypedUse>(node->child1());
+                fixEdge<UntypedUse>(node->child2());
+                break;
+            }
             fixIntConvertingEdge(node->child1());
             fixIntConvertingEdge(node->child2());
             break;
@@ -185,8 +191,8 @@ private:
         case ArithAdd:
         case ArithSub: {
             if (op == ArithSub
-                && (Node::shouldSpeculateUntypedForArithmetic(node->child1().node(), node->child2().node())
-                    || m_graph.hasExitSite(node->origin.semantic, BadType))) {
+                && Node::shouldSpeculateUntypedForArithmetic(node->child1().node(), node->child2().node())
+                && m_graph.hasExitSite(node->origin.semantic, BadType)) {
 
                 fixEdge<UntypedUse>(node->child1());
                 fixEdge<UntypedUse>(node->child2());
@@ -230,7 +236,7 @@ private:
             Edge& leftChild = node->child1();
             Edge& rightChild = node->child2();
             if (Node::shouldSpeculateUntypedForArithmetic(leftChild.node(), rightChild.node())
-                || m_graph.hasExitSite(node->origin.semantic, BadType)) {
+                && m_graph.hasExitSite(node->origin.semantic, BadType)) {
                 fixEdge<UntypedUse>(leftChild);
                 fixEdge<UntypedUse>(rightChild);
                 node->setResult(NodeResultJS);
@@ -268,8 +274,8 @@ private:
             Edge& leftChild = node->child1();
             Edge& rightChild = node->child2();
             if (op == ArithDiv
-                && (Node::shouldSpeculateUntypedForArithmetic(leftChild.node(), rightChild.node())
-                    || m_graph.hasExitSite(node->origin.semantic, BadType))) {
+                && Node::shouldSpeculateUntypedForArithmetic(leftChild.node(), rightChild.node())
+                && m_graph.hasExitSite(node->origin.semantic, BadType)) {
                 fixEdge<UntypedUse>(leftChild);
                 fixEdge<UntypedUse>(rightChild);
                 node->setResult(NodeResultJS);
@@ -348,6 +354,11 @@ private:
 
             fixDoubleOrBooleanEdge(node->child1());
             fixDoubleOrBooleanEdge(node->child2());
+            break;
+        }
+
+        case ArithRandom: {
+            node->setResult(NodeResultDouble);
             break;
         }
 
@@ -1258,6 +1269,7 @@ private:
         case BooleanToNumber:
         case PhantomNewObject:
         case PhantomNewFunction:
+        case PhantomNewGeneratorFunction:
         case PhantomCreateActivation:
         case PhantomDirectArguments:
         case PhantomClonedArguments:
@@ -1399,7 +1411,8 @@ private:
 
         case CreateScopedArguments:
         case CreateActivation:
-        case NewFunction: {
+        case NewFunction:
+        case NewGeneratorFunction: {
             fixEdge<CellUse>(node->child1());
             break;
         }

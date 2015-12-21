@@ -1,3 +1,75 @@
+2015-12-20  Dan Bernstein  <mitz@apple.com>
+
+        Remove unused setToolbarHeight
+        https://bugs.webkit.org/show_bug.cgi?id=152466
+
+        Reviewed by Darin Adler.
+
+        * WebCoreSupport/WebInspectorClient.h:
+        * WebCoreSupport/WebInspectorClient.mm::
+        (WebInspectorFrontendClient::setToolbarHeight): Deleted.
+
+2015-12-19  Dan Bernstein  <mitz@apple.com>
+
+        [Mac] WebKit contains dead source code for OS X Mavericks and earlier
+        https://bugs.webkit.org/show_bug.cgi?id=152462
+
+        Reviewed by Alexey Proskuryakov.
+
+        - Removed build setting definitions for OS X 10.9 and earlier, and simplified defintions
+          that became uniform across all OS X versions as a result:
+
+        * Configurations/DebugRelease.xcconfig:
+        * Configurations/FeatureDefines.xcconfig:
+        * Configurations/Version.xcconfig:
+        * Configurations/WebKitLegacy.xcconfig:
+
+        - Simplified expressions involving __MAC_OS_X_VERSION_MIN_REQUIRED and removed code that was
+          never getting compiled:
+
+        * WebCoreSupport/WebInspectorClient.mm:
+        * WebView/WebDynamicScrollBarsView.mm:
+        * WebView/WebHTMLView.mm:
+        * WebView/WebImmediateActionController.h:
+        * WebView/WebImmediateActionController.mm:
+        * WebView/WebView.mm:
+        * WebView/WebViewData.h:
+        * WebView/WebViewData.mm:
+        * WebView/WebViewInternal.h:
+
+2015-12-17  Tim Horton  <timothy_horton@apple.com>
+
+        Data detector yellow highlight location is vertically mirrored in WebKit1
+        https://bugs.webkit.org/show_bug.cgi?id=152216
+        <rdar://problem/23848003>
+
+        Reviewed by Darin Adler.
+
+        * WebView/WebImmediateActionController.mm:
+        (-[WebImmediateActionController _animationControllerForDataDetectedText]):
+        Match the conversion we do at every other WK1 TextIndicator construction.
+
+2015-12-16  Youenn Fablet  <youenn.fablet@crf.canon.fr>
+
+        [Fetch API] Add fetch API compile time flag
+        https://bugs.webkit.org/show_bug.cgi?id=152254
+
+        Reviewed by Darin Adler.
+
+        * Configurations/FeatureDefines.xcconfig:
+
+2015-12-13  Tim Horton  <timothy_horton@apple.com>
+
+        Adopt CGIOSurfaceContextCreateImageReference to avoid unnecessary readback
+        https://bugs.webkit.org/show_bug.cgi?id=150988
+        <rdar://problem/18993594>
+
+        Reviewed by Darin Adler.
+
+        * WebCoreSupport/WebContextMenuClient.mm:
+        (WebContextMenuClient::imageForCurrentSharingServicePickerItem):
+        Adopt sinkIntoImage and drawConsumingImageBuffer in a few places.
+
 2015-12-11  Eric Carlson  <eric.carlson@apple.com>
 
         [MediaStream] Add a setting to allow the mock media capture devices to be enabled and disabled

@@ -94,6 +94,7 @@ inline CapabilityLevel canCompile(Node* node)
     case ArithSin:
     case ArithCos:
     case ArithPow:
+    case ArithRandom:
     case ArithRound:
     case ArithSqrt:
     case ArithLog:
@@ -110,6 +111,7 @@ inline CapabilityLevel canCompile(Node* node)
     case CreateActivation:
     case NewArrowFunction:
     case NewFunction:
+    case NewGeneratorFunction:
     case GetClosureVar:
     case PutClosureVar:
     case CreateDirectArguments:
@@ -195,6 +197,7 @@ inline CapabilityLevel canCompile(Node* node)
     case BottomValue:
     case PhantomNewObject:
     case PhantomNewFunction:
+    case PhantomNewGeneratorFunction:
     case PhantomCreateActivation:
     case PutHint:
     case CheckStructureImmediate:

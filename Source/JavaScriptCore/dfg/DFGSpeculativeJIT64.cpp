@@ -2409,6 +2409,10 @@ void SpeculativeJIT::compile(Node* node)
         break;
     }
 
+    case ArithRandom:
+        compileArithRandom(node);
+        break;
+
     case ArithRound:
         compileArithRound(node);
         break;
@@ -4423,6 +4427,7 @@ void SpeculativeJIT::compile(Node* node)
 
     case NewFunction:
     case NewArrowFunction:
+    case NewGeneratorFunction:
         compileNewFunction(node);
         break;
 
@@ -4878,6 +4883,7 @@ void SpeculativeJIT::compile(Node* node)
     case BottomValue:
     case PhantomNewObject:
     case PhantomNewFunction:
+    case PhantomNewGeneratorFunction:
     case PhantomCreateActivation:
     case GetMyArgumentByVal:
     case PutHint:
@@ -4980,6 +4986,17 @@ void SpeculativeJIT::speculateDoubleRepMachineInt(Edge edge)
         m_jit.branch64(
             JITCompiler::Equal, resultGPR,
             JITCompiler::TrustedImm64(JSValue::notInt52)));
+}
+
+void SpeculativeJIT::compileArithRandom(Node* node)
+{
+    JSGlobalObject* globalObject = m_jit.graph().globalObjectFor(node->origin.semantic);
+    GPRTemporary temp1(this);
+    GPRTemporary temp2(this);
+    GPRTemporary temp3(this);
+    FPRTemporary result(this);
+    m_jit.emitRandomThunk(globalObject, temp1.gpr(), temp2.gpr(), temp3.gpr(), result.fpr());
+    doubleResult(result.fpr(), node);
 }
 
 #endif

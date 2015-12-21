@@ -359,7 +359,7 @@ public:
     DECLARE_EXPORT_INFO;
 
     bool hasDebugger() const { return m_debugger; }
-    bool hasProfiler() const { return globalObjectMethodTable()->supportsProfiling(this); }
+    bool hasProfiler() const;
     const RuntimeFlags& runtimeFlags() const { return m_runtimeFlags; }
 
 protected:
@@ -667,6 +667,7 @@ public:
 
     TemplateRegistry& templateRegistry() { return m_templateRegistry; }
 
+    static ptrdiff_t weakRandomOffset() { return OBJECT_OFFSETOF(JSGlobalObject, m_weakRandom); }
     double weakRandomNumber() { return m_weakRandom.get(); }
     unsigned weakRandomInteger() { return m_weakRandom.getUint32(); }
 

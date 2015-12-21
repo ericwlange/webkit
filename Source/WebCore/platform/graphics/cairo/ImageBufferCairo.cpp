@@ -195,6 +195,11 @@ GraphicsContext& ImageBuffer::context() const
     return *m_data.m_context;
 }
 
+RefPtr<Image> ImageBuffer::sinkIntoImage(std::unique_ptr<ImageBuffer> imageBuffer, ScaleBehavior scaleBehavior)
+{
+    return imageBuffer->copyImage(DontCopyBackingStore, scaleBehavior);
+}
+
 RefPtr<Image> ImageBuffer::copyImage(BackingStoreCopy copyBehavior, ScaleBehavior) const
 {
     if (copyBehavior == CopyBackingStore)
@@ -212,6 +217,11 @@ BackingStoreCopy ImageBuffer::fastCopyImageMode()
 void ImageBuffer::clip(GraphicsContext& context, const FloatRect& maskRect) const
 {
     context.platformContext()->pushImageMask(m_data.m_surface.get(), maskRect);
+}
+
+void ImageBuffer::drawConsuming(std::unique_ptr<ImageBuffer> imageBuffer, GraphicsContext& destContext, const FloatRect& destRect, const FloatRect& srcRect, CompositeOperator op, BlendMode blendMode, bool useLowQualityScale)
+{
+    imageBuffer->draw(destContext, destRect, srcRect, op, blendMode, useLowQualityScale);
 }
 
 void ImageBuffer::draw(GraphicsContext& destinationContext, const FloatRect& destRect, const FloatRect& srcRect,
@@ -458,7 +468,7 @@ String ImageBuffer::toDataURL(const String& mimeType, const double*, CoordinateS
 #endif
 
 #if ENABLE(ACCELERATED_2D_CANVAS) && !USE(COORDINATED_GRAPHICS_THREADED)
-void ImageBufferData::paintToTextureMapper(TextureMapper* textureMapper, const FloatRect& targetRect, const TransformationMatrix& matrix, float opacity)
+void ImageBufferData::paintToTextureMapper(TextureMapper& textureMapper, const FloatRect& targetRect, const TransformationMatrix& matrix, float opacity)
 {
     ASSERT(m_texture);
 
@@ -467,7 +477,7 @@ void ImageBufferData::paintToTextureMapper(TextureMapper* textureMapper, const F
     cairo_surface_flush(m_surface.get());
     previousActiveContext->makeContextCurrent();
 
-    static_cast<TextureMapperGL*>(textureMapper)->drawTexture(m_texture, TextureMapperGL::ShouldBlend, m_size, targetRect, matrix, opacity);
+    static_cast<TextureMapperGL&>(textureMapper).drawTexture(m_texture, TextureMapperGL::ShouldBlend, m_size, targetRect, matrix, opacity);
 }
 #endif
 

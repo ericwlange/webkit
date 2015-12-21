@@ -37,7 +37,7 @@
 #include <CFNetwork/CFURLRequest.h>
 
 // FIXME: Remove the defined(__OBJC__)-guard onnce we fix <rdar://problem/19033610>.
-#if defined(__OBJC__) && (PLATFORM(IOS) || __MAC_OS_X_VERSION_MIN_REQUIRED >= 101000)
+#if defined(__OBJC__) && PLATFORM(COCOA)
 // FIXME: As a workaround for <rdar://problem/18337182>, we conditionally enclose the header
 // in an extern "C" linkage block to make it suitable for C++ use.
 #ifdef __cplusplus
@@ -49,9 +49,20 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
-#endif // defined(__OBJC__) && (PLATFORM(IOS) || __MAC_OS_X_VERSION_MIN_REQUIRED >= 101000)
+#endif // defined(__OBJC__) && PLATFORM(COCOA)
 
-#else
+#else // PLATFORM(WIN) || USE(APPLE_INTERNAL_SDK)
+
+#if defined(__OBJC__)
+@interface NSURLSessionTask (TimingData)
+- (NSDictionary *)_timingData;
+@end
+#endif
+
+typedef CF_ENUM(int64_t, _TimingDataOptions)
+{
+    _TimingDataOptionsEnableW3CNavigationTiming = (1 << 0)
+};
 
 typedef struct OpaqueCFHTTPCookieStorage* CFHTTPCookieStorageRef;
 typedef const struct _CFCachedURLResponse* CFCachedURLResponseRef;
@@ -101,7 +112,7 @@ EXTERN_C CFStringRef const kCFHTTPCookieLocalFileDomain;
 @end
 #endif
 
-#if defined(__OBJC__) && (!USE(APPLE_INTERNAL_SDK) || PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED <= 1090)
+#if defined(__OBJC__) && !USE(APPLE_INTERNAL_SDK)
 enum : NSUInteger {
     NSHTTPCookieAcceptPolicyExclusivelyFromMainDocumentDomain = 3,
 };
@@ -117,7 +128,7 @@ EXTERN_C CFDataRef _CFNetworkCopyATSContext(void);
 EXTERN_C Boolean _CFNetworkSetATSContext(CFDataRef);
 #endif
 
-#if PLATFORM(IOS) || (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101000)
+#if PLATFORM(COCOA)
 EXTERN_C void _CFNetworkResetHSTSHostsSinceDate(CFURLStorageSessionRef, CFDateRef);
 #endif
 
@@ -135,7 +146,7 @@ EXTERN_C CFArrayRef _CFHTTPParsedCookiesWithResponseHeaderFields(CFAllocatorRef 
 @end
 #endif
 
-#if !USE(APPLE_INTERNAL_SDK) || (PLATFORM(MAC) && __MAC_OS_X_VERSION_MIN_REQUIRED == 1090)
+#if !USE(APPLE_INTERNAL_SDK)
 @interface NSHTTPCookieStorage ()
 - (void)removeCookiesSinceDate:(NSDate *)date;
 - (id)_initWithCFHTTPCookieStorage:(CFHTTPCookieStorageRef)cfStorage;

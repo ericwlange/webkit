@@ -37,6 +37,7 @@
 #include "ModuleAnalyzer.h"
 #include "ModuleLoaderObject.h"
 #include "Parser.h"
+#include "ScriptProfilingScope.h"
 #include <wtf/WTFThreadData.h>
 
 namespace JSC {
@@ -113,6 +114,12 @@ JSValue evaluate(ExecState* exec, const SourceCode& source, JSValue thisValue, N
     return result;
 }
 
+JSValue profiledEvaluate(ExecState* exec, ProfilingReason reason, const SourceCode& source, JSValue thisValue, NakedPtr<Exception>& returnedException)
+{
+    ScriptProfilingScope profilingScope(exec->vmEntryGlobalObject(), reason);
+    return evaluate(exec, source, thisValue, returnedException);
+}
+
 static JSValue identifierToJSValue(VM& vm, const Identifier& identifier)
 {
     if (identifier.isSymbol())
@@ -167,7 +174,7 @@ JSInternalPromise* loadAndEvaluateModule(ExecState* exec, const SourceCode& sour
     JSGlobalObject* globalObject = exec->vmEntryGlobalObject();
 
     // Insert the given source code to the ModuleLoader registry as the fetched registry entry.
-    globalObject->moduleLoader()->provide(exec, key, ModuleLoaderObject::Status::Fetch, source.toString());
+    globalObject->moduleLoader()->provide(exec, key, ModuleLoaderObject::Status::Fetch, source.view().toString());
     if (exec->hadException())
         return rejectPromise(exec, globalObject);
 
@@ -204,7 +211,7 @@ JSInternalPromise* loadModule(ExecState* exec, const SourceCode& source)
     JSGlobalObject* globalObject = exec->vmEntryGlobalObject();
 
     // Insert the given source code to the ModuleLoader registry as the fetched registry entry.
-    globalObject->moduleLoader()->provide(exec, key, ModuleLoaderObject::Status::Fetch, source.toString());
+    globalObject->moduleLoader()->provide(exec, key, ModuleLoaderObject::Status::Fetch, source.view().toString());
     if (exec->hadException())
         return rejectPromise(exec, globalObject);
 

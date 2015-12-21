@@ -86,6 +86,7 @@ enum Opcode : int16_t {
 
     // Floating point math.
     Abs,
+    Ceil,
     Sqrt,
 
     // Casts and such.
@@ -99,10 +100,10 @@ enum Opcode : int16_t {
     ZExt32,
     // Takes Int64 and returns Int32:
     Trunc,
-    // Takes ints and returns Double:
+    // Takes ints and returns Double. Note that we don't currently provide the opposite operation,
+    // because double-to-int conversions have weirdly different semantics on different platforms. Use
+    // a patchpoint if you need to do that.
     IToD,
-    // Takes Double and returns Int32:
-    DToI32,
     // Convert between double and float.
     FloatToDouble,
     DoubleToFloat,
@@ -121,6 +122,9 @@ enum Opcode : int16_t {
     Below,
     AboveEqual,
     BelowEqual,
+
+    // Unordered floating point compare: values are equal or either one is NaN.
+    EqualOrUnordered,
 
     // SSA form of conditional move. The first child is evaluated for truthiness. If true, the second child
     // is returned. Otherwise, the third child is returned.
@@ -174,9 +178,8 @@ enum Opcode : int16_t {
     // after the first CheckAdd executes, the second CheckAdd could not have possibly taken slow
     // path. Therefore, the second CheckAdd's callback is irrelevant.
     //
-    // Note that the first two children of these operations have ValueRep's, both as input constraints and
-    // in the reps provided to the generator. The output constraints could be anything, and should not be
-    // inspected for meaning. If you want to capture the values of the inputs, use stackmap arguments.
+    // Note that the first two children of these operations have ValueRep's as input constraints but do
+    // not have output constraints.
     CheckAdd,
     CheckSub,
     CheckMul,
@@ -184,8 +187,8 @@ enum Opcode : int16_t {
     // Check that side-exits. Use the CheckValue class. Like CheckAdd and friends, this has a
     // stackmap with a generation callback. This takes an int argument that this branches on, with
     // full branch fusion in the instruction selector. A true value jumps to the generator's slow
-    // path. Note that the predicate child is has both an input and output ValueRep. The input constraint
-    // must be Any, and the output could be anything.
+    // path. Note that the predicate child is has both an input ValueRep. The input constraint must be
+    // WarmAny. It will not have an output constraint.
     Check,
 
     // SSA support, in the style of DFG SSA.

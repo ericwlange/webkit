@@ -545,13 +545,6 @@ fast/css3-text/css3-text-decoration/no-gap-between-two-rounded-textboxes.html [ 
 fast/css3-text/css3-text-decoration/text-decoration-skip/text-decoration-skip-ink-inherit.html [ ImageOnlyFailure ]
 
 # CSS3 Text tests that fail:
-css3/blending/blend-mode-accelerated-parent-overflow-hidden.html [ ImageOnlyFailure ]
-css3/blending/blend-mode-body-composited-child-background-color.html [ ImageOnlyFailure ]
-css3/blending/blend-mode-body-composited-child.html [ ImageOnlyFailure ]
-css3/blending/blend-mode-clip-accelerated-blending-child.html [ ImageOnlyFailure ]
-css3/blending/blend-mode-clip-accelerated-blending-double.html [ ImageOnlyFailure ]
-css3/blending/blend-mode-clip-accelerated-blending-with-siblings.html [ ImageOnlyFailure ]
-css3/blending/blend-mode-clip-rect-accelerated-blending.html [ ImageOnlyFailure ]
 fast/css3-text/css3-text-align-last/text-align-last-with-text-align-justify.html [ ImageOnlyFailure ]
 
 # Font tests that fail:
@@ -2523,6 +2516,9 @@ platform/ios-simulator/ios/scrolling/touch-stacking.html [ Failure ]
 platform/ios-simulator/ios/touch [ Skip ]
 fast/events/ios/focused-input-should-assist-on-touch.html [ Skip ]
 
+webkit.org/b/152276 platform/ios-simulator/ios/scrolling/scroll-events-back-forward-after-pageshow.html [ Failure ]
+webkit.org/b/152276 platform/ios-simulator/ios/scrolling/scroll-events-back-forward.html [ Failure ]
+
 webkit.org/b/145432 media/video-transformed-by-javascript.html [ Failure ]
 
 # iOS tests that assert:
@@ -2766,7 +2762,6 @@ webkit.org/b/150366 accessibility/aria-table-attributes.html [ Pass ]
 
 fast/forms/select-element-focus-ring.html [ Failure Pass ]
 animations/keyframe-multiple-timing-functions-transform.html [ Failure Pass ]
-streams/reference-implementation/readable-stream-cancel.html [ Failure Pass ]
 compositing/visible-rect/coverage-scrolling.html [ Failure Pass ]
 
 # Imported Blink tests.
@@ -2834,3 +2829,33 @@ webkit.org/b/152134 fast/events/ios/keyboard-should-not-trigger-resize.html [ Pa
 webkit.org/b/152134 fast/events/ios/single-tap-generates-click.html [ Pass Timeout ]
 webkit.org/b/152134 fast/events/ios/unscalable-viewport-clicks-on-doubletap.html [ Pass Timeout ]
 webkit.org/b/152134 fast/events/ios/viewport-device-width-at-initial-scale-fast-clicks.html  [ Pass Timeout ]
+
+webkit.org/b/152141 fast/picture/image-picture-1x.html [ Failure ]
+webkit.org/b/152141 fast/picture/image-picture-invalid.html [ Failure ]
+webkit.org/b/152141 fast/picture/image-picture-nested.html [ Failure ]
+
+webkit.org/b/152279 http/tests/misc/large-js-program.php [ Pass Crash ]
+webkit.org/b/152279 js/dom/line-column-numbers.html [ Pass Crash ]
+
+webkit.org/b/152390 http/tests/contentdispositionattachmentsandbox/referer-header-stripped-with-meta-referer-always.html [ Skip ]
+webkit.org/b/152390 http/tests/contentdispositionattachmentsandbox/referer-header-stripped-with-meta-referer-default.html [ Skip ]
+webkit.org/b/152390 http/tests/contentdispositionattachmentsandbox/referer-header-stripped-with-meta-referer-never.html [ Skip ]
+webkit.org/b/152390 http/tests/contentdispositionattachmentsandbox/referer-header-stripped-with-meta-referer-no-referrer-when-downgrade.html [ Skip ]
+webkit.org/b/152390 http/tests/contentdispositionattachmentsandbox/referer-header-stripped-with-meta-referer-no-referrer.html [ Skip ]
+webkit.org/b/152390 http/tests/contentdispositionattachmentsandbox/referer-header-stripped-with-meta-referer-origin.html [ Skip ]
+webkit.org/b/152390 http/tests/contentdispositionattachmentsandbox/referer-header-stripped-with-meta-referer-unsafe-url.html [ Skip ]
+webkit.org/b/152390 http/tests/contentdispositionattachmentsandbox/referer-header-stripped.html [ Skip ]
+
+webkit.org/b/152137 fast/media/mq-any-hover-matchMedia.html [ Failure ]
+webkit.org/b/152137 fast/media/mq-any-hover-styling.html [ Failure ]
+webkit.org/b/152137 fast/media/mq-any-pointer-matchMedia.html [ Failure ]
+webkit.org/b/152137 fast/media/mq-any-pointer-styling.html [ Failure ]
+webkit.org/b/152137 fast/media/mq-hover-matchMedia.html [ Failure ]
+webkit.org/b/152137 fast/media/mq-hover-styling.html [ Failure ]
+webkit.org/b/152137 fast/media/mq-pointer-matchMedia.html [ Failure ]
+webkit.org/b/152137 fast/media/mq-pointer-styling.html [ Failure ]
+webkit.org/b/152137 fast/media/mq-pointer.html [ Failure ]
+
+webkit.org/b/152442 fast/scrolling/rtl-point-in-iframe.html [ Skip ]
+
+webkit.org/b/152449 fast/events/can-click-element-on-page-with-active-pseudo-class-and-search-field.html [ Skip ]

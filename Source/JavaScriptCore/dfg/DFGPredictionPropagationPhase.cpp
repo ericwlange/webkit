@@ -209,7 +209,8 @@ private:
         case GetSetter:
         case GetCallee:
         case NewArrowFunction:
-        case NewFunction: {
+        case NewFunction:
+        case NewGeneratorFunction: {
             changed |= setPrediction(SpecFunction);
             break;
         }
@@ -374,6 +375,11 @@ private:
         case ArithCos:
         case ArithLog: {
             changed |= setPrediction(SpecBytecodeDouble);
+            break;
+        }
+
+        case ArithRandom: {
+            changed |= setPrediction(SpecDoubleReal);
             break;
         }
 
@@ -589,6 +595,7 @@ private:
         case BooleanToNumber:
         case PhantomNewObject:
         case PhantomNewFunction:
+        case PhantomNewGeneratorFunction:
         case PhantomCreateActivation:
         case PhantomDirectArguments:
         case PhantomClonedArguments:

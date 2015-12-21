@@ -1,5 +1,13 @@
 {
    "Committers" : {
+      "Aakash Jain" : {
+         "emails" : [
+            "aakash_jain@apple.com"
+         ],
+         "nicks" : [
+            "aakash_jain"
+         ]
+      },
       "Aaron Boodman" : {
          "emails" : [
             "aa@chromium.org"
@@ -3593,6 +3601,11 @@
       "Web Components Team" : {
          "emails" : [
             "webcomponents-bugzilla@chromium.org"
+         ]
+      },
+      "WebKitGTK+ Bugs" : {
+         "emails" : [
+            "bugs-noreply@webkitgtk.org"
          ]
       },
       "WebKit Review Bot" : {

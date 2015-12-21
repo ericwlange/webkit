@@ -76,6 +76,8 @@ WebInspector.loaded = function()
         InspectorBackend.registerDOMStorageDispatcher(new WebInspector.DOMStorageObserver);
     if (InspectorBackend.registerApplicationCacheDispatcher)
         InspectorBackend.registerApplicationCacheDispatcher(new WebInspector.ApplicationCacheObserver);
+    if (InspectorBackend.registerScriptProfilerDispatcher)
+        InspectorBackend.registerScriptProfilerDispatcher(new WebInspector.ScriptProfilerObserver);
     if (InspectorBackend.registerTimelineDispatcher)
         InspectorBackend.registerTimelineDispatcher(new WebInspector.TimelineObserver);
     if (InspectorBackend.registerCSSDispatcher)
@@ -364,7 +366,6 @@ WebInspector.contentLoaded = function()
     this._dockingAvailable = false;
 
     this._updateDockNavigationItems();
-    this._updateToolbarHeight();
     this._setupViewHierarchy();
 
     // These tabs are always available for selecting, modulo isTabAllowed().
@@ -1367,8 +1368,7 @@ WebInspector._contextMenuRequested = function(event)
     let proposedContextMenu;
 
     // This is setting is only defined in engineering builds.
-    let showDebugUI = WebInspector.showDebugUISetting && WebInspector.showDebugUISetting.value;
-    if (showDebugUI) {
+    if (WebInspector.isDebugUIEnabled()) {
         proposedContextMenu = WebInspector.ContextMenu.createFromEvent(event);
         proposedContextMenu.appendSeparator();
         proposedContextMenu.appendItem(WebInspector.unlocalizedString("Reload Web Inspector"), () => {
@@ -1382,6 +1382,11 @@ WebInspector._contextMenuRequested = function(event)
     if (proposedContextMenu)
         proposedContextMenu.show();
 };
+
+WebInspector.isDebugUIEnabled = function()
+{
+    return WebInspector.showDebugUISetting && WebInspector.showDebugUISetting.value;
+}
 
 WebInspector._undock = function(event)
 {
@@ -1428,12 +1433,6 @@ WebInspector._quickConsoleDidResize = function(event)
 WebInspector._sidebarWidthDidChange = function(event)
 {
     this._tabBrowserSizeDidChange();
-};
-
-WebInspector._updateToolbarHeight = function()
-{
-    if (WebInspector.Platform.name === "mac" && WebInspector.Platform.version.release < 10)
-        InspectorFrontendHost.setToolbarHeight(this.toolbar.element.offsetHeight);
 };
 
 WebInspector._setupViewHierarchy = function()

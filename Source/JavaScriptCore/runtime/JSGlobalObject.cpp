@@ -606,6 +606,14 @@ putDirectWithoutTransition(vm, vm.propertyNames-> jsName, lowerName ## Construct
     resetPrototype(vm, prototype());
 }
 
+bool JSGlobalObject::hasProfiler() const
+{
+    if (m_debugger && m_debugger->hasProfilingClient())
+        return true;
+
+    return globalObjectMethodTable()->supportsProfiling(this);
+}
+
 void JSGlobalObject::put(JSCell* cell, ExecState* exec, PropertyName propertyName, JSValue value, PutPropertySlot& slot)
 {
     JSGlobalObject* thisObject = jsCast<JSGlobalObject*>(cell);
@@ -1072,8 +1080,7 @@ const HashSet<String>& JSGlobalObject::intlCollatorAvailableLocales()
         int32_t count = ucol_countAvailable();
         for (int32_t i = 0; i < count; ++i) {
             String locale(ucol_getAvailable(i));
-            // Change from ICU format to BCP47.
-            locale.replace('_', '-');
+            convertICULocaleToBCP47LanguageTag(locale);
             m_intlCollatorAvailableLocales.add(locale);
         }
     }
@@ -1086,8 +1093,7 @@ const HashSet<String>& JSGlobalObject::intlDateTimeFormatAvailableLocales()
         int32_t count = udat_countAvailable();
         for (int32_t i = 0; i < count; ++i) {
             String locale(udat_getAvailable(i));
-            // Change from ICU format to BCP47.
-            locale.replace('_', '-');
+            convertICULocaleToBCP47LanguageTag(locale);
             m_intlDateTimeFormatAvailableLocales.add(locale);
         }
     }
@@ -1100,8 +1106,7 @@ const HashSet<String>& JSGlobalObject::intlNumberFormatAvailableLocales()
         int32_t count = unum_countAvailable();
         for (int32_t i = 0; i < count; ++i) {
             String locale(unum_getAvailable(i));
-            // Change from ICU format to BCP47.
-            locale.replace('_', '-');
+            convertICULocaleToBCP47LanguageTag(locale);
             m_intlNumberFormatAvailableLocales.add(locale);
         }
     }

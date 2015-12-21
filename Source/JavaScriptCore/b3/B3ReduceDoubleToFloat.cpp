@@ -49,6 +49,7 @@ void attemptSimplification(Value* candidate)
         }
         break;
     case Abs:
+    case Ceil:
     case Sqrt:
         if (candidate->child(0)->opcode() == FloatToDouble) {
             candidate->child(0) = candidate->child(0)->child(0);
@@ -105,6 +106,7 @@ void reduceDoubleToFloat(Procedure& procedure)
             case GreaterThan:
             case LessEqual:
             case GreaterEqual:
+            case EqualOrUnordered:
                 if (value->child(0)->opcode() == FloatToDouble && value->child(1)->opcode() == FloatToDouble) {
                     value->child(0) = value->child(0)->child(0);
                     value->child(1) = value->child(1)->child(0);

@@ -85,6 +85,7 @@ bool doesGC(Graph& graph, Node* node)
     case ArithMax:
     case ArithPow:
     case ArithSqrt:
+    case ArithRandom:
     case ArithRound:
     case ArithFRound:
     case ArithSin:
@@ -214,6 +215,7 @@ bool doesGC(Graph& graph, Node* node)
     case BottomValue:
     case PhantomNewObject:
     case PhantomNewFunction:
+    case PhantomNewGeneratorFunction:
     case PhantomCreateActivation:
     case PhantomDirectArguments:
     case PhantomClonedArguments:
@@ -248,6 +250,7 @@ bool doesGC(Graph& graph, Node* node)
     case MakeRope:
     case NewArrowFunction:
     case NewFunction:
+    case NewGeneratorFunction:
     case NewTypedArray:
     case ThrowReferenceError:
     case GetPropertyEnumerator:
