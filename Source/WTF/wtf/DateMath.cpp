@@ -431,7 +431,7 @@ static int32_t calculateUTCOffset()
     localt.tm_zone = 0;
 #endif
 
-#if HAVE(TIMEGM)
+#if HAVE(TIMEGM) && !OS(ANDROID)
     time_t utcOffset = timegm(&localt) - mktime(&localt);
 #else
     // Using a canned date of 01/01/2009 on platforms with weaker date-handling foo.

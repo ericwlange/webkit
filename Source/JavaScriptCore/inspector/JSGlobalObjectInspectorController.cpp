@@ -37,7 +37,6 @@
 #include "InspectorFrontendChannel.h"
 #include "InspectorFrontendRouter.h"
 #include "InspectorHeapAgent.h"
-#include "InspectorScriptProfilerAgent.h"
 #include "JSGlobalObject.h"
 #include "JSGlobalObjectConsoleAgent.h"
 #include "JSGlobalObjectConsoleClient.h"
@@ -49,7 +48,7 @@
 #include <wtf/Stopwatch.h>
 
 #include <cxxabi.h>
-#if OS(DARWIN) || (OS(LINUX) && !PLATFORM(GTK))
+#if OS(DARWIN) || (OS(LINUX) && !PLATFORM(GTK) && !OS(ANDROID))
 #include <dlfcn.h>
 #include <execinfo.h>
 #endif
@@ -98,7 +97,6 @@ JSGlobalObjectInspectorController::JSGlobalObjectInspectorController(JSGlobalObj
     m_agents.append(WTF::move(consoleAgent));
     m_agents.append(WTF::move(debuggerAgent));
     m_agents.append(std::make_unique<InspectorHeapAgent>(context));
-    m_agents.append(std::make_unique<InspectorScriptProfilerAgent>(context));
 
     m_executionStopwatch->start();
 }
@@ -187,7 +185,7 @@ void JSGlobalObjectInspectorController::pause()
 
 void JSGlobalObjectInspectorController::appendAPIBacktrace(ScriptCallStack* callStack)
 {
-#if OS(DARWIN) || (OS(LINUX) && !PLATFORM(GTK))
+#if OS(DARWIN) || (OS(LINUX) && !PLATFORM(GTK) && !OS(ANDROID))
     static const int framesToShow = 31;
     static const int framesToSkip = 3; // WTFGetBacktrace, appendAPIBacktrace, reportAPIException.
 

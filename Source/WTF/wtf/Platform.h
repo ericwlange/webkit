@@ -386,6 +386,11 @@
 #define WTF_OS_LINUX 1
 #endif
 
+/* OS(ANDROID) - Android - Android is Linux, but has its own C non-POSIX minimal C library called Bionic. */
+#ifdef __ANDROID__
+#define WTF_OS_ANDROID 1
+#endif
+
 /* OS(NETBSD) - NetBSD */
 #if defined(__NetBSD__)
 #define WTF_OS_NETBSD 1
@@ -415,6 +420,7 @@
     || OS(FREEBSD)          \
     || OS(HURD)             \
     || OS(LINUX)            \
+    || OS(ANDROID)          \
     || OS(NETBSD)           \
     || OS(OPENBSD)          \
     || OS(SOLARIS)          \
@@ -486,6 +492,11 @@
 #define USE_HARFBUZZ 1
 #define USE_SOUP 1
 #define USE_WEBP 1
+#endif
+
+#if OS(ANDROID)
+#define USE_GLIB 1
+#define GLIB_VERSION_MIN_REQUIRED GLIB_VERSION_2_38
 #endif
 
 #if PLATFORM(EFL)
@@ -590,7 +601,6 @@
 
 #if OS(UNIX)
 #define HAVE_ERRNO_H 1
-#define HAVE_LANGINFO_H 1
 #define HAVE_MMAP 1
 #define HAVE_SIGNAL_H 1
 #define HAVE_STRINGS_H 1
@@ -598,6 +608,11 @@
 #define HAVE_SYS_TIME_H 1 
 #define USE_PTHREADS 1
 #endif /* OS(UNIX) */
+
+#if OS(UNIX) && !OS(ANDROID)
+#define HAVE_LANGINFO_H 1
+#else
+#endif
 
 #if (OS(FREEBSD) || OS(OPENBSD)) && !defined(__GLIBC__)
 #define HAVE_PTHREAD_NP_H 1

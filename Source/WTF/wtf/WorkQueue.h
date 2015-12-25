@@ -38,7 +38,7 @@
 #include <dispatch/dispatch.h>
 #endif
 
-#if PLATFORM(GTK)
+#if PLATFORM(GTK) || OS(ANDROID)
 #include <wtf/Condition.h>
 #include <wtf/RunLoop.h>
 #include <wtf/glib/GRefPtr.h>
@@ -74,7 +74,7 @@ public:
 
     WTF_EXPORT_PRIVATE static void concurrentApply(size_t iterations, const std::function<void (size_t index)>&);
 
-#if PLATFORM(GTK)
+#if PLATFORM(GTK) || OS(ANDROID)
     RunLoop& runLoop() const { return *m_runLoop; }
 #elif PLATFORM(EFL)
     void registerSocketEventHandler(int, std::function<void ()>);
@@ -102,7 +102,7 @@ private:
     static DWORD WINAPI unregisterWaitAndDestroyItemCallback(void* context);
 #endif
 
-#if PLATFORM(GTK)
+#if PLATFORM(GTK) || OS(ANDROID)
     ThreadIdentifier m_workQueueThread;
     Lock m_initializeRunLoopConditionMutex;
     Condition m_initializeRunLoopCondition;

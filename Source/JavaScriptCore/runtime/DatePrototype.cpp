@@ -42,7 +42,7 @@
 #include <wtf/MathExtras.h>
 #include <wtf/StringExtras.h>
 
-#if HAVE(LANGINFO_H)
+#if HAVE(LANGINFO_H) && !OS(ANDROID)
 #include <langinfo.h>
 #endif
 
@@ -58,7 +58,7 @@
 #include <sys/timeb.h>
 #endif
 
-#if !(OS(DARWIN) && USE(CF))
+#if !(OS(DARWIN) && USE(CF)) && !OS(ANDROID)
 #include <unicode/udat.h>
 #endif
 

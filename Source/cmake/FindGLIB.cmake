@@ -50,6 +50,24 @@ find_library(GLIB_LIBRARIES
           ${PC_GLIB_LIBRARY_DIRS}
 )
 
+find_library(FFI_LIBRARIES
+    NAMES ffi
+    HINTS ${PC_GLIB_LIBDIR}
+          ${PC_GLIB_LIBRARY_DIRS}
+)
+
+find_library(ICONV_LIBRARIES
+    NAMES iconv
+    HINTS ${PC_GLIB_LIBDIR}
+          ${PC_GLIB_LIBRARY_DIRS}
+)
+
+find_library(INTL_LIBRARIES
+    NAMES intl
+    HINTS ${PC_GLIB_LIBDIR}
+          ${PC_GLIB_LIBRARY_DIRS}
+)
+
 # Files in glib's main include path may include glibconfig.h, which,
 # for some odd reason, is normally in $LIBDIR/glib-2.0/include.
 get_filename_component(_GLIB_LIBRARY_DIR ${GLIB_LIBRARIES} PATH)
@@ -117,4 +135,7 @@ mark_as_advanced(
     GLIB_INCLUDE_DIR
     GLIB_INCLUDE_DIRS
     GLIB_LIBRARIES
+    FFI_LIBRARIES
+    ICONV_LIBRARIES
+    INTL_LIBRARIES
 )

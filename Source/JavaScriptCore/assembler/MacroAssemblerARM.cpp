@@ -33,7 +33,7 @@
 
 #include <wtf/InlineASM.h>
 
-#if OS(LINUX)
+#if OS(LINUX) && !OS(ANDROID)
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -46,7 +46,7 @@ namespace JSC {
 
 static bool isVFPPresent()
 {
-#if OS(LINUX)
+#if OS(LINUX) && !OS(ANDROID)
     int fd = open("/proc/self/auxv", O_RDONLY);
     if (fd != -1) {
         Elf32_auxv_t aux;
