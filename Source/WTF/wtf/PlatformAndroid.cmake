@@ -7,8 +7,13 @@ list(APPEND WTF_SOURCES
     glib/MainThreadGLib.cpp
     glib/RunLoopGLib.cpp
     glib/WorkQueueGLib.cpp
-    icu/stubdata.cpp
 )
+
+if (NOT LINK_ICU_DATA)
+    list(APPEND WTF_SOURCES
+        icu/stubdata.cpp
+    )
+endif()
 
 list(APPEND WTF_LIBRARIES
     ${GLIB_GIO_LIBRARIES}
