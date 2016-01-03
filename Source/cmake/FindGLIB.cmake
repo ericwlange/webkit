@@ -54,6 +54,7 @@ find_library(FFI_LIBRARIES
     NAMES ffi
     HINTS ${PC_GLIB_LIBDIR}
           ${PC_GLIB_LIBRARY_DIRS}
+          ${PC_GLIB_LIBDIR}/../lib64
 )
 
 find_library(ICONV_LIBRARIES
