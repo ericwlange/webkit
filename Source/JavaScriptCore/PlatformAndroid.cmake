@@ -14,15 +14,7 @@ endif()
 SET( CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} ${GCC_JSC_COMPILE_FLAGS}" )
 
 FIND_LIBRARY( ANDROID_LOG_LIBRARY log )
-FIND_LIBRARY( ANDROID_CPPSTD_LIBRARY stdc++ )
 
-#        FIND_LIBRARY( ANDROID_ANDROID_LIBRARY android )
-
-# Because Android has multiple architectures (e.g. armeabi, armeabi-v7a, x86)
-# but doesn't have fat binaries like Darwin, nor does it use file suffixes,
-# we need to override the library install path to
-# put products in the correct architecture specific subdirectory.
-# -DANDROID_ABI=<arch> should have been specified on cmake invocation.
 set(LIB_INSTALL_DIR "${ANDROID_ABI}")
 
 list(APPEND JavaScriptCore_SOURCES
@@ -34,8 +26,6 @@ list(APPEND JavaScriptCore_SOURCES
 
 list(APPEND JavaScriptCore_LIBRARIES
     ${ANDROID_LOG_LIBRARY}
-    ${ANDROID_CPPSTD_LIBRARY}
-#    ${ANDROID_ANDROID_LIBRARY}
     ${ICU_LIBRARIES}
     ${ICU_I18N_LIBRARIES}
     ${ICU_DATA_LIBRARIES}
