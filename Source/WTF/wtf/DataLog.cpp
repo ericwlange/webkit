@@ -35,10 +35,6 @@
 #include <unistd.h>
 #endif
 
-#if OS(ANDROID)
-#include <android/log.h>
-#endif
-
 #define DATA_LOG_TO_FILE 0
 
 // Set to 1 to use the temp directory from confstr instead of hardcoded directory.
@@ -59,23 +55,6 @@ static pthread_once_t initializeLogFileOnceKey = PTHREAD_ONCE_INIT;
 static FilePrintStream* file;
 
 static uint64_t fileData[(sizeof(FilePrintStream) + 7) / 8];
-
-#if OS(ANDROID)
-static int pfd[2];
-static pthread_t thr;
-
-static void *thread_func(void*)
-{
-    ssize_t rdsz;
-    char buf[128];
-    while((rdsz = read(pfd[0], buf, sizeof buf - 1)) > 0) {
-        if(buf[rdsz - 1] == '\n') --rdsz;
-        buf[rdsz - 1] = 0;  /* add null-terminator */
-        __android_log_write(ANDROID_LOG_DEBUG, "JavaScriptCore", buf);
-    }
-    return 0;
-}
-#endif
 
 static void initializeLogFileOnce()
 {
@@ -146,22 +125,6 @@ static void initializeLogFileOnce()
     }
     
     setvbuf(file->file(), 0, _IONBF, 0); // Prefer unbuffered output, so that we get a full log upon crash or deadlock.
-
-#if OS(ANDROID)
-    /* make stdout line-buffered and stderr unbuffered */
-    setvbuf(stdout, 0, _IOLBF, 0);
-    setvbuf(stderr, 0, _IONBF, 0);
-
-    /* create the pipe and redirect stdout and stderr */
-    pipe(pfd);
-    dup2(pfd[1], 1);
-    dup2(pfd[1], 2);
-
-    /* spawn the logging thread */
-    if(pthread_create(&thr, 0, thread_func, 0) == -1)
-        return; // fail silently
-    pthread_detach(thr);
-#endif
 
 }
 

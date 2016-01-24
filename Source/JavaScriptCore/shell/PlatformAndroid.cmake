@@ -1,9 +1,16 @@
 include_directories(./ ${JavaScriptCore_SYSTEM_INCLUDE_DIRECTORIES})
 
+string(REPLACE "-fpic" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+string(REPLACE "-fPIC" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
+
+set_source_files_properties(../jsc.cpp PROPERTIES COMPILE_FLAGS -fpic)
+
+SET( CMAKE_EXE_LINKER_FLAGS  "${CMAKE_EXE_LINKER_FLAGS} -pie" )
+
 list(APPEND JSC_LIBRARIES
     ${ICU_I18N_LIBRARIES}
     ${ICU_LIBRARIES}
-#    ${ICU_DATA_LIBRARIES}
+    ${ICU_DATA_LIBRARIES}
     ${GLIB_LIBRARIES}
 )
 

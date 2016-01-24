@@ -175,6 +175,7 @@ ThreadIdentifier createThreadInternal(ThreadFunction entryPoint, void* data, con
 #endif
     int error = pthread_create(&threadHandle, &attr, wtfThreadEntryPoint, invocation.get());
     pthread_attr_destroy(&attr);
+
     if (error) {
         LOG_ERROR("Failed to create pthread at entry point %p with data %p", wtfThreadEntryPoint, invocation.get());
         return 0;

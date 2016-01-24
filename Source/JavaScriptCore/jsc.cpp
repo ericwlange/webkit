@@ -1694,12 +1694,19 @@ int main(int argc, char** argv)
 
     // We can't use destructors in the following code because it uses Windows
     // Structured Exception Handling
-    int res = 0;
+    static int s_argc = argc;
+    static char **s_argv = argv;
+    static int res = 0;
+    WTF::ThreadIdentifier mainThread = WTF::createThread("mainThread", []() {
+    //int res = 0;
     TRY
-        res = jscmain(argc, argv);
+        res = jscmain(s_argc, s_argv);
     EXCEPT(res = 3)
     if (Options::logHeapStatisticsAtExit())
         HeapStatistics::reportSuccess();
+    });
+    WTF::waitForThreadCompletion(mainThread);
+    
 
 #if PLATFORM(EFL)
     ecore_shutdown();

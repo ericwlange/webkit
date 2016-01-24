@@ -1,5 +1,5 @@
 //
-// JSJNI.h
+// DispatchQueue.h
 // AndroidJSCore project
 //
 // https://github.com/ericwlange/AndroidJSCore/
@@ -7,7 +7,7 @@
 // Created by Eric Lange
 //
 /*
- Copyright (c) 2014-2016 Eric Lange. All rights reserved.
+ Copyright (c) 2016 Eric Lange. All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -30,22 +30,36 @@
  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
+#ifndef _DISPATCHQUEUE_H_
+#define _DISPATCHQUEUE_H_ 1
 
-#include <stdlib.h>
-#include <jni.h>
-#include <android/log.h>
+#include <functional>
+#include "threadqueue.h"
 
-#include "JavaScriptCore/JavaScript.h"
-#include "DispatchQueue.h"
+#define DISPATCH_QUEUE_FUNCTION 0L
+#define DISPATCH_QUEUE_DESTRUCT 1L
 
-#define NATIVE(package,rt,f) extern "C" rt Java_org_liquidplayer_webkit_javascriptcore_##package##_##f
-#define PARAMS __attribute__((unused))JNIEnv* env, __attribute__((unused))jobject thiz
+class DispatchQueue {
 
-class JSContextWrapper {
 public:
-    DispatchQueue *dispatch_q;
-    JSContextRef context;
-    JSContextWrapper() { dispatch_q = new DispatchQueue(); }
-    virtual ~JSContextWrapper() { delete dispatch_q; }
+	DispatchQueue();
+	virtual ~DispatchQueue();
+
+	virtual int add(std::function<void(void *)> func, void *payload,
+		struct threadqueue *semaphore=NULL);
+	virtual int block(std::function<void(void *)> func, void *payload);
+	virtual int destroy();
+
+private:
+	virtual void* run();
+	static void* _run(void *thiz) { return ((DispatchQueue*)thiz)->run(); }
+	struct threadqueue _queue;
+	struct funct {
+		std::function<void(void *)> func;
+		void *payload;
+		struct threadqueue *semaphore;
+	};
+	pthread_t _thread;
 };
 
+#endif

@@ -33,6 +33,7 @@
 #include "Sizes.h"
 #include <algorithm>
 #include <cstdlib>
+#include <malloc.h>
 
 using namespace std;
 

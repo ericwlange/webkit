@@ -22,6 +22,8 @@ list(APPEND JavaScriptCore_SOURCES
     android/JSObject.cpp
     android/JSString.cpp
     android/JSValue.cpp
+    android/threadqueue.c
+    android/DispatchQueue.cpp
 )
 
 list(APPEND JavaScriptCore_LIBRARIES

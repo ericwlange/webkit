@@ -7,7 +7,7 @@
 // Created by Eric Lange
 //
 /*
- Copyright (c) 2014 Eric Lange. All rights reserved.
+ Copyright (c) 2014-2016 Eric Lange. All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
  modification, are permitted provided that the following conditions are met:
@@ -35,6 +35,7 @@
 #include <map>
 
 NATIVE(JSObject,jlong,make) (PARAMS, jlong ctx, jlong data) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	return (long) JSObjectMake((JSContextRef) ctx, (JSClassRef) NULL, (void*)data);
 }
 
@@ -97,6 +98,7 @@ void Instance::FinalizeCallback(JSObjectRef object)
 	env->CallVoidMethod(thiz, mid, (jlong)object);
 }
 NATIVE(JSObject,jlong,makeWithFinalizeCallback) (PARAMS, jlong ctx) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	Instance *instance = new Instance(env,thiz, (JSContextRef)ctx);
 	return instance->getObjRef();
 }
@@ -230,14 +232,17 @@ JSObjectRef Function::ConstructorCallback(JSContextRef ctx, JSObjectRef construc
 }
 
 NATIVE(JSObject,jlong,makeFunctionWithCallback) (PARAMS, jlong ctx, jlong name) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	Function *function = new Function(env,thiz, (JSContextRef)ctx, (JSStringRef)name);
 	return function->getObjRef();
 }
 NATIVE(JSObject,void,releaseFunctionWithCallback) (PARAMS, jlong ctx, jlong function) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	Function::release((JSContextRef)ctx, (JSObjectRef)function);
 }
 
 NATIVE(JSObject,jobject,makeArray) (PARAMS, jlong ctx, jlongArray args) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	JSValueRef exception = NULL;
 
 	int i;
@@ -264,6 +269,7 @@ NATIVE(JSObject,jobject,makeArray) (PARAMS, jlong ctx, jlongArray args) {
 }
 
 NATIVE(JSObject,jobject,makeDate) (PARAMS, jlong ctx, jlongArray args) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	JSValueRef exception = NULL;
 
 	int i;
@@ -290,6 +296,7 @@ NATIVE(JSObject,jobject,makeDate) (PARAMS, jlong ctx, jlongArray args) {
 }
 
 NATIVE(JSObject,jobject,makeError) (PARAMS, jlong ctx, jlongArray args) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	JSValueRef exception = NULL;
 
 	int i;
@@ -316,6 +323,7 @@ NATIVE(JSObject,jobject,makeError) (PARAMS, jlong ctx, jlongArray args) {
 }
 
 NATIVE(JSObject,jobject,makeRegExp) (PARAMS, jlong ctx, jlongArray args) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	JSValueRef exception = NULL;
 
 	int i;
@@ -343,6 +351,7 @@ NATIVE(JSObject,jobject,makeRegExp) (PARAMS, jlong ctx, jlongArray args) {
 
 NATIVE(JSObject,jobject,makeFunction) (PARAMS, jlong ctx, jlong name, jlongArray parameterNames,
 		jlong body, jlong sourceURL, jint startingLineNumber) {
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
 	JSValueRef exception = NULL;
 
 	int i;
@@ -359,16 +368,36 @@ NATIVE(JSObject,jobject,makeFunction) (PARAMS, jlong ctx, jlong name, jlongArray
 	jobject out = env->NewObject(ret, cid);
 
 	jfieldID fid = env->GetFieldID(ret , "reference", "J");
-	env->SetLongField( out, fid,
-			(long) JSObjectMakeFunction(
-					(JSContextRef) ctx,
-					(JSStringRef) name,
-					(unsigned)len,
-					(len==0)?NULL:parameterNameArr,
-					(JSStringRef) body,
-					(JSStringRef) sourceURL,
-					(int)startingLineNumber,
-					&exception));
+
+	struct msg_t {
+		JSContextRef ctx;
+		JSStringRef  name;
+		unsigned     len;
+		JSStringRef* parameterNameArr;
+		JSStringRef  body;
+		JSStringRef  sourceURL;
+		int          startingLineNumber;
+		JSValueRef*  exception;
+		long         lval;
+	};
+	msg_t msg = {
+		wrapper->context,
+		(JSStringRef)name,
+		(unsigned)len,
+		(len==0)?NULL:parameterNameArr,
+		(JSStringRef) body,
+		(JSStringRef) sourceURL,
+		(int)startingLineNumber,
+		&exception,
+		0L
+        };
+	wrapper->dispatch_q->block([](void *msg){
+		msg_t *m = (msg_t *)msg;
+		m->lval = (long) JSObjectMakeFunction(
+			m->ctx, m->name, m->len, m->parameterNameArr,
+			m->body, m->sourceURL, m->startingLineNumber, m->exception);
+	}, &msg);
+	env->SetLongField( out, fid, msg.lval);
 
 	fid = env->GetFieldID(ret , "exception", "J");
 	env->SetLongField( out, fid, (long) exception);
@@ -378,18 +407,27 @@ NATIVE(JSObject,jobject,makeFunction) (PARAMS, jlong ctx, jlong name, jlongArray
 }
 
 NATIVE(JSObject,jlong,getPrototype) (PARAMS, jlong ctx, jlong object) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	return (long) JSObjectGetPrototype((JSContextRef) ctx, (JSObjectRef) object);
 }
 
 NATIVE(JSObject,void,setPrototype) (PARAMS, jlong ctx, jlong object, jlong value) {
-	JSObjectSetPrototype((JSContextRef) ctx, (JSObjectRef) object, (JSValueRef) value);
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
+	struct msg_t { JSContextRef ctx; JSObjectRef object; JSValueRef value; };
+        msg_t msg = { wrapper->context, (JSObjectRef) object, (JSValueRef)value };
+	wrapper->dispatch_q->block([](void *msg){
+		msg_t *m = (msg_t *)msg;
+		JSObjectSetPrototype(m->ctx, m->object, m->value);
+	}, &msg);
 }
 
 NATIVE(JSObject,jboolean,hasProperty) (PARAMS, jlong ctx, jlong object, jlong propertyName) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	return JSObjectHasProperty((JSContextRef) ctx, (JSObjectRef) object, (JSStringRef) propertyName);
 }
 
 NATIVE(JSObject,jobject,getProperty) (PARAMS, jlong ctx, jlong object, jlong propertyName) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	JSValueRef exception = NULL;
 
 	jclass ret = env->FindClass("org/liquidplayer/webkit/javascriptcore/JNIReturnObject");
@@ -397,8 +435,8 @@ NATIVE(JSObject,jobject,getProperty) (PARAMS, jlong ctx, jlong object, jlong pro
 	jobject out = env->NewObject(ret, cid);
 
 	jfieldID fid = env->GetFieldID(ret , "reference", "J");
-	env->SetLongField( out, fid, (long) JSObjectGetProperty((JSContextRef) ctx, (JSObjectRef)object, (JSStringRef)propertyName,
-			&exception));
+	env->SetLongField( out, fid, (long) JSObjectGetProperty((JSContextRef) ctx, (JSObjectRef)object,
+		(JSStringRef)propertyName, &exception));
 
 	fid = env->GetFieldID(ret , "exception", "J");
 	env->SetLongField( out, fid, (long) exception);
@@ -413,8 +451,17 @@ NATIVE(JSObject,jobject,setProperty) (PARAMS, jlong ctx, jlong object, jlong pro
 	jmethodID cid = env->GetMethodID(ret,"<init>","()V");
 	jobject out = env->NewObject(ret, cid);
 
-	JSObjectSetProperty((JSContextRef) ctx, (JSObjectRef) object, (JSStringRef) propertyName,
-			(JSValueRef) value, (JSPropertyAttributes) attributes, &exception);
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
+	struct msg_t { JSContextRef ctx; JSObjectRef object; JSStringRef propertyName; JSValueRef value;
+		JSPropertyAttributes attributes; JSValueRef* exception; };
+        msg_t msg = { wrapper->context, (JSObjectRef) object, (JSStringRef) propertyName,
+		(JSValueRef)value, (JSPropertyAttributes)attributes, &exception };
+	wrapper->dispatch_q->block([](void *msg){
+		msg_t *m = (msg_t *)msg;
+		JSObjectSetProperty(m->ctx, m->object, m->propertyName,
+			m->value, m->attributes, m->exception);
+	}, &msg);
+	
 	jfieldID fid = env->GetFieldID(ret , "exception", "J");
 	env->SetLongField( out, fid, (long) exception);
 
@@ -429,8 +476,18 @@ NATIVE(JSObject,jobject,deleteProperty) (PARAMS, jlong ctx, jlong object, jlong 
 	jobject out = env->NewObject(ret, cid);
 
 	jfieldID fid = env->GetFieldID(ret ,"bool", "Z");
-	env->SetBooleanField( out, fid, (bool) JSObjectDeleteProperty((JSContextRef) ctx, (JSObjectRef)object, (JSStringRef)propertyName,
-			&exception));
+
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
+	struct msg_t { JSContextRef ctx; JSObjectRef object; JSStringRef propertyName;
+		JSValueRef* exception; bool bval; };
+        msg_t msg = { wrapper->context, (JSObjectRef) object, (JSStringRef) propertyName,
+		&exception, false };
+	wrapper->dispatch_q->block([](void *msg){
+		msg_t *m = (msg_t *)msg;
+		m->bval = (bool) JSObjectDeleteProperty(m->ctx, m->object,
+			m->propertyName, m->exception);
+	}, &msg);
+	env->SetBooleanField( out, fid, msg.bval);
 
 	fid = env->GetFieldID(ret , "exception", "J");
 	env->SetLongField( out, fid, (long) exception);
@@ -439,6 +496,7 @@ NATIVE(JSObject,jobject,deleteProperty) (PARAMS, jlong ctx, jlong object, jlong 
 }
 
 NATIVE(JSObject,jobject,getPropertyAtIndex) (PARAMS, jlong ctx, jlong object, jint propertyIndex) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	JSValueRef exception = NULL;
 
 	jclass ret = env->FindClass("org/liquidplayer/webkit/javascriptcore/JNIReturnObject");
@@ -463,8 +521,17 @@ NATIVE(JSObject,jobject,setPropertyAtIndex) (PARAMS, jlong ctx, jlong object, ji
 	jobject out = env->NewObject(ret, cid);
 
 	jfieldID fid = env->GetFieldID(ret , "reference", "J");
-	JSObjectSetPropertyAtIndex((JSContextRef) ctx, (JSObjectRef)object, (unsigned)propertyIndex,
-			(JSValueRef)value, &exception);
+
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
+	struct msg_t { JSContextRef ctx; JSObjectRef object; unsigned propertyIndex; JSValueRef value;
+		JSValueRef* exception; };
+        msg_t msg = { wrapper->context, (JSObjectRef) object, (unsigned) propertyIndex,
+		(JSValueRef)value, &exception };
+	wrapper->dispatch_q->block([](void *msg){
+		msg_t *m = (msg_t *)msg;
+		JSObjectSetPropertyAtIndex(m->ctx, m->object, m->propertyIndex,
+			m->value, m->exception);
+	}, &msg);
 
 	fid = env->GetFieldID(ret , "exception", "J");
 	env->SetLongField( out, fid, (long) exception);
@@ -481,6 +548,7 @@ NATIVE(JSObject,jboolean,setPrivate) (PARAMS, jlong object, jlong data) {
 }
 
 NATIVE(JSObject,jboolean,isFunction) (PARAMS, jlong ctx, jlong object) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	return JSObjectIsFunction((JSContextRef) ctx, (JSObjectRef) object);
 }
 
@@ -501,8 +569,18 @@ NATIVE(JSObject,jobject,callAsFunction) (PARAMS, jlong ctx, jlong object, jlong 
 	jobject out = env->NewObject(ret, cid);
 
 	jfieldID fid = env->GetFieldID(ret , "reference", "J");
-	env->SetLongField( out, fid, (long) JSObjectCallAsFunction((JSContextRef) ctx, (JSObjectRef)object,
-			(JSObjectRef)thisObject, (size_t)len, (len==0)?NULL:elements, &exception));
+
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
+	struct msg_t { JSContextRef ctx; JSObjectRef object; JSObjectRef thisObject; size_t len;
+		JSValueRef* elements; JSValueRef* exception; long lval; };
+        msg_t msg = { wrapper->context, (JSObjectRef) object, (JSObjectRef) thisObject,
+		(size_t)len, (len==0)?NULL:elements, &exception, 0L };
+	wrapper->dispatch_q->block([](void *msg){
+		msg_t *m = (msg_t *)msg;
+		m->lval = (long) JSObjectCallAsFunction(m->ctx, m->object,
+			m->thisObject, m->len, m->elements, m->exception);
+	}, &msg);
+	env->SetLongField( out, fid, msg.lval);
 
 	fid = env->GetFieldID(ret , "exception", "J");
 	env->SetLongField( out, fid, (long) exception);
@@ -512,6 +590,7 @@ NATIVE(JSObject,jobject,callAsFunction) (PARAMS, jlong ctx, jlong object, jlong 
 }
 
 NATIVE(JSObject,jboolean,isConstructor) (PARAMS, jlong ctx, jlong object) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	return JSObjectIsConstructor((JSContextRef) ctx, (JSObjectRef) object);
 }
 
@@ -532,8 +611,18 @@ NATIVE(JSObject,jobject,callAsConstructor) (PARAMS, jlong ctx, jlong object, jlo
 	jobject out = env->NewObject(ret, cid);
 
 	jfieldID fid = env->GetFieldID(ret , "reference", "J");
-	env->SetLongField( out, fid, (long) JSObjectCallAsConstructor((JSContextRef) ctx, (JSObjectRef)object,
-			(size_t)len, (len==0)?NULL:elements, &exception));
+
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
+	struct msg_t { JSContextRef ctx; JSObjectRef object; size_t len;
+		JSValueRef* elements; JSValueRef* exception; long lval; };
+        msg_t msg = { wrapper->context, (JSObjectRef) object,
+		(size_t)len, (len==0)?NULL:elements, &exception, 0L };
+	wrapper->dispatch_q->block([](void *msg){
+		msg_t *m = (msg_t *)msg;
+		m->lval = (long) JSObjectCallAsConstructor(m->ctx, m->object,
+			m->len, m->elements, m->exception);
+	}, &msg);
+	env->SetLongField( out, fid, msg.lval);
 
 	fid = env->GetFieldID(ret , "exception", "J");
 	env->SetLongField( out, fid, (long) exception);
@@ -543,6 +632,7 @@ NATIVE(JSObject,jobject,callAsConstructor) (PARAMS, jlong ctx, jlong object, jlo
 }
 
 NATIVE(JSObject,jlong,copyPropertyNames) (PARAMS, jlong ctx, jlong object) {
+	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
 	JSPropertyNameArrayRef propertyNameArray = JSObjectCopyPropertyNames((JSContextRef) ctx,
 			(JSObjectRef) object);
 	return (jlong)propertyNameArray;
@@ -553,7 +643,8 @@ NATIVE(JSObject,jlongArray,getPropertyNames) (PARAMS,jlong propertyNameArray) {
 	jlongArray retArray = env->NewLongArray(count);
 	jlong* stringRefs = new jlong[count];
 	for (size_t i=0; i<count; i++) {
-		stringRefs[i] = (long) JSPropertyNameArrayGetNameAtIndex((JSPropertyNameArrayRef)propertyNameArray, i);
+		stringRefs[i] = (long) JSPropertyNameArrayGetNameAtIndex(
+ 			(JSPropertyNameArrayRef)propertyNameArray, i);
 	}
 	env->SetLongArrayRegion(retArray,0,count,stringRefs);
 
