@@ -33,53 +33,56 @@
 
 #include "JSJNI.h"
 
+#define SYNCHRONIZE(ctxRef,valueRef,t,f) \
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctxRef; \
+	struct msg_t { JSContextRef ctxRef; JSValueRef valueRef; t ret; }; \
+	msg_t msg = { wrapper->context, (JSValueRef)valueRef, (t)0 }; \
+	wrapper->worker_q->sync([](void *msg) { \
+		msg_t *m = (msg_t *)msg; \
+		m->ret = f(m->ctxRef, m->valueRef); \
+	},&msg); \
+	return msg.ret
+
+
 NATIVE(JSValue,jint,getType) (PARAMS, jlong ctxRef, jlong valueRef )
 {
-	ctxRef = (jlong) ((JSContextWrapper *)ctxRef)->context;
-	return JSValueGetType((JSContextRef)ctxRef, (JSValueRef)valueRef);
+	SYNCHRONIZE(ctxRef,valueRef,int,JSValueGetType);
 }
 
 NATIVE(JSValue,jboolean,isUndefined) (PARAMS, jlong ctxRef, jlong valueRef)
 {
-	ctxRef = (jlong) ((JSContextWrapper *)ctxRef)->context;
-	return JSValueIsUndefined((JSContextRef)ctxRef, (JSValueRef)valueRef);
+	SYNCHRONIZE(ctxRef,valueRef,bool,JSValueIsUndefined);
 }
 
 NATIVE(JSValue,jboolean,isNull) (PARAMS, jlong ctxRef, jlong valueRef)
 {
-	ctxRef = (jlong) ((JSContextWrapper *)ctxRef)->context;
-	return JSValueIsNull((JSContextRef)ctxRef, (JSValueRef)valueRef);
+	SYNCHRONIZE(ctxRef,valueRef,bool,JSValueIsNull);
 }
 
 NATIVE(JSValue,jboolean,isBoolean) (PARAMS, jlong ctxRef, jlong valueRef)
 {
-	ctxRef = (jlong) ((JSContextWrapper *)ctxRef)->context;
-	return JSValueIsBoolean((JSContextRef)ctxRef, (JSValueRef)valueRef);
+	SYNCHRONIZE(ctxRef,valueRef,bool,JSValueIsBoolean);
 }
 
 NATIVE(JSValue,jboolean,isNumber) (PARAMS, jlong ctxRef, jlong valueRef)
 {
-	ctxRef = (jlong) ((JSContextWrapper *)ctxRef)->context;
-	return JSValueIsNumber((JSContextRef)ctxRef, (JSValueRef)valueRef);
+	SYNCHRONIZE(ctxRef,valueRef,bool,JSValueIsNumber);
 }
 
 NATIVE(JSValue,jboolean,isString) (PARAMS, jlong ctxRef, jlong valueRef)
 {
-	ctxRef = (jlong) ((JSContextWrapper *)ctxRef)->context;
-	return JSValueIsString((JSContextRef)ctxRef, (JSValueRef)valueRef);
+	SYNCHRONIZE(ctxRef,valueRef,bool,JSValueIsString);
 }
 
 NATIVE(JSValue,jboolean,isObject) (PARAMS, jlong ctxRef, jlong valueRef)
 {
-	ctxRef = (jlong) ((JSContextWrapper *)ctxRef)->context;
-	return JSValueIsObject((JSContextRef)ctxRef, (JSValueRef)valueRef);
+	SYNCHRONIZE(ctxRef,valueRef,bool,JSValueIsObject);
 }
 
 /* Comparing values */
 
 NATIVE(JSValue,jobject,isEqual) (PARAMS, jlong ctxRef, jlong a, jlong b)
 {
-	ctxRef = (jlong) ((JSContextWrapper *)ctxRef)->context;
 	JSValueRef exception = NULL;
 
 	jclass ret = env->FindClass("org/liquidplayer/webkit/javascriptcore/JNIReturnObject");
@@ -87,7 +90,17 @@ NATIVE(JSValue,jobject,isEqual) (PARAMS, jlong ctxRef, jlong a, jlong b)
 	jobject out = env->NewObject(ret, cid);
 
 	jfieldID fid = env->GetFieldID(ret , "bool", "Z");
-	env->SetBooleanField( out, fid, JSValueIsEqual((JSContextRef) ctxRef, (JSValueRef) a, (JSValueRef) b, &exception));
+	
+	struct msg_t { JSContextRef ctxRef; JSValueRef a; JSValueRef b; JSValueRef *exception;
+		bool ret; };
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctxRef;
+	msg_t msg = { wrapper->context, (JSValueRef)a, (JSValueRef)b, &exception, false };
+	wrapper->worker_q->sync([](void *msg) {
+		msg_t *m = (msg_t *)msg;
+		m->ret = JSValueIsEqual(m->ctxRef, m->a, m->b, m->exception);
+	},&msg);
+	
+	env->SetBooleanField( out, fid, msg.ret);
 
 	fid = env->GetFieldID(ret , "exception", "J");
 	env->SetLongField( out, fid, (long) exception);
@@ -97,13 +110,19 @@ NATIVE(JSValue,jobject,isEqual) (PARAMS, jlong ctxRef, jlong a, jlong b)
 
 NATIVE(JSValue,jboolean,isStrictEqual) (PARAMS, jlong ctxRef, jlong a, jlong b)
 {
-	ctxRef = (jlong) ((JSContextWrapper *)ctxRef)->context;
-	return JSValueIsStrictEqual((JSContextRef) ctxRef, (JSValueRef) a, (JSValueRef) b);
+	struct msg_t { JSContextRef ctxRef; JSValueRef a; JSValueRef b; bool ret; };
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctxRef;
+	msg_t msg = { wrapper->context, (JSValueRef)a, (JSValueRef)b, false };
+	wrapper->worker_q->sync([](void *msg) {
+		msg_t *m = (msg_t *)msg;
+		m->ret = JSValueIsStrictEqual(m->ctxRef, m->a, m->b);
+	},&msg);
+	return msg.ret;
 }
 
-NATIVE(JSValue,jobject,isInstanceOfConstructor) (PARAMS, jlong ctxRef, jlong valueRef, jlong constructor)
+NATIVE(JSValue,jobject,isInstanceOfConstructor) (PARAMS, jlong ctxRef, jlong valueRef,
+	jlong constructor)
 {
-	ctxRef = (jlong) ((JSContextWrapper *)ctxRef)->context;
 	JSValueRef exception = NULL;
 
 	jclass ret = env->FindClass("org/liquidplayer/webkit/javascriptcore/JNIReturnObject");
@@ -111,8 +130,19 @@ NATIVE(JSValue,jobject,isInstanceOfConstructor) (PARAMS, jlong ctxRef, jlong val
 	jobject out = env->NewObject(ret, cid);
 
 	jfieldID fid = env->GetFieldID(ret ,"bool", "Z");
-	env->SetBooleanField( out, fid, JSValueIsInstanceOfConstructor((JSContextRef) ctxRef,
-			(JSValueRef) valueRef, (JSObjectRef) constructor, &exception));
+
+	struct msg_t { JSContextRef ctxRef; JSValueRef valueRef; JSObjectRef constructor;
+		JSValueRef *exception; bool ret; };
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctxRef;
+	msg_t msg = { wrapper->context, (JSValueRef)valueRef, (JSObjectRef)constructor, 
+		&exception, false };
+	wrapper->worker_q->sync([](void *msg) {
+		msg_t *m = (msg_t *)msg;
+		m->ret = JSValueIsInstanceOfConstructor(m->ctxRef, m->valueRef, m->constructor,
+			m->exception);
+	},&msg);
+
+	env->SetBooleanField( out, fid, msg.ret);
 
 	fid = env->GetFieldID(ret , "exception", "J");
 	env->SetLongField( out, fid, (long)exception);
@@ -124,32 +154,58 @@ NATIVE(JSValue,jobject,isInstanceOfConstructor) (PARAMS, jlong ctxRef, jlong val
 
 NATIVE(JSValue,jlong,makeUndefined) (PARAMS, jlong ctx)
 {
-	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
-	return (long)JSValueMakeUndefined((JSContextRef) ctx);
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
+	long lval = (long) wrapper->context;
+	wrapper->worker_q->sync([](void *lval) {
+		*((long *)lval) = (long) JSValueMakeUndefined((JSContextRef) *((long*)lval));
+	},&lval);
+	return lval;
 }
 
 NATIVE(JSValue,jlong,makeNull) (PARAMS, jlong ctx)
 {
-	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
-	return (long) JSValueMakeNull((JSContextRef) ctx);
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
+	long lval = (long) wrapper->context;
+	wrapper->worker_q->sync([](void *lval) {
+		*((long *)lval) = (long) JSValueMakeNull((JSContextRef) *((long*)lval));
+	},&lval);
+	return lval;
 }
 
 NATIVE(JSValue,jlong,makeBoolean) (PARAMS, jlong ctx, jboolean boolean)
 {
-	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
-	return (long) JSValueMakeBoolean((JSContextRef) ctx, (bool) boolean);
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
+	struct msg_t { JSContextRef ctx; bool boolean; JSValueRef ret; };
+	msg_t msg = { wrapper->context, (bool)boolean, NULL };
+	wrapper->worker_q->sync([](void *msg) {
+		msg_t *m = (msg_t *)msg;
+		m->ret = JSValueMakeBoolean(m->ctx, m->boolean);
+	},&msg);
+	return (long) msg.ret;
 }
 
 NATIVE(JSValue,jlong,makeNumber) (PARAMS, jlong ctx, jdouble number)
 {
-	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
-	return (long) JSValueMakeNumber((JSContextRef) ctx, (double) number);
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
+	struct msg_t { JSContextRef ctx; double number; JSValueRef ret; };
+	msg_t msg = { wrapper->context, (double)number, NULL };
+	wrapper->worker_q->sync([](void *msg) {
+		msg_t *m = (msg_t *)msg;
+		m->ret = JSValueMakeNumber(m->ctx, m->number);
+	},&msg);
+	return (long) msg.ret;
 }
 
 NATIVE(JSValue,jlong,makeString) (PARAMS, jlong ctx, jlong stringRef)
 {
-	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
-	return (long) JSValueMakeString((JSContextRef) ctx, (JSStringRef) stringRef);
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
+	struct msg_t { JSContextRef ctx; JSStringRef stringRef; JSValueRef ret; };
+	msg_t msg = { wrapper->context, (JSStringRef)stringRef, NULL };
+	wrapper->worker_q->sync([](void *msg) {
+		msg_t *m = (msg_t *)msg;
+		m->ret = JSValueMakeString(m->ctx, m->stringRef);
+	},&msg);
+	return (long) msg.ret;
 }
 
 /* Converting to and from JSON formatted strings */
@@ -167,7 +223,7 @@ NATIVE(JSValue,jlong,makeFromJSONString) (PARAMS, jlong ctx, jlong stringRef)
 		(JSStringRef)stringRef,
 		(JSValueRef)0
         };
-	wrapper->dispatch_q->block([](void *msg){
+	wrapper->worker_q->sync([](void *msg){
 		msg_t *m = (msg_t *)msg;
 		m->valueRef = JSValueMakeFromJSONString(m->ctx, m->stringRef);
 	}, &msg);
@@ -198,7 +254,7 @@ NATIVE(JSValue,jobject,createJSONString) (PARAMS, jlong ctxRef, jlong valueRef, 
 		&exception,
 		0L
         };
-	wrapper->dispatch_q->block([](void *msg){
+	wrapper->worker_q->sync([](void *msg){
 		msg_t *m = (msg_t *)msg;
 		m->lval = (long) JSValueCreateJSONString(m->ctxRef,
 			m->valueRef, m->indent, m->exception);
@@ -216,13 +272,18 @@ NATIVE(JSValue,jobject,createJSONString) (PARAMS, jlong ctxRef, jlong valueRef, 
 
 NATIVE(JSValue,jboolean,toBoolean) (PARAMS, jlong ctx, jlong valueRef)
 {
-	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
-	return JSValueToBoolean((JSContextRef) ctx, (JSValueRef) valueRef);
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
+	struct msg_t { JSContextRef ctx; JSValueRef valueRef; bool ret; };
+	msg_t msg = { wrapper->context, (JSValueRef)valueRef, false };
+	wrapper->worker_q->sync([](void *msg) {
+		msg_t *m = (msg_t *)msg;
+		m->ret = JSValueToBoolean(m->ctx, m->valueRef);
+	},&msg);
+	return msg.ret;
 }
 
 NATIVE(JSValue,jobject,toNumber) (PARAMS, jlong ctxRef, jlong valueRef)
 {
-	ctxRef = (jlong) ((JSContextWrapper *)ctxRef)->context;
 	JSValueRef exception = NULL;
 
 	jclass ret = env->FindClass("org/liquidplayer/webkit/javascriptcore/JNIReturnObject");
@@ -230,7 +291,17 @@ NATIVE(JSValue,jobject,toNumber) (PARAMS, jlong ctxRef, jlong valueRef)
 	jobject out = env->NewObject(ret, cid);
 
 	jfieldID fid = env->GetFieldID(ret , "number", "D");
-	env->SetDoubleField( out, fid, JSValueToNumber((JSContextRef) ctxRef, (JSValueRef) valueRef, &exception));
+
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctxRef;
+	struct msg_t { JSContextRef ctx; JSValueRef valueRef; JSValueRef *exception;
+		double ret; };
+	msg_t msg = { wrapper->context, (JSValueRef)valueRef, &exception, 0.0 };
+	wrapper->worker_q->sync([](void *msg) {
+		msg_t *m = (msg_t *)msg;
+		m->ret = JSValueToNumber(m->ctx, m->valueRef, m->exception);
+	},&msg);
+
+	env->SetDoubleField( out, fid, msg.ret);
 
 	fid = env->GetFieldID(ret , "exception", "J");
 	env->SetLongField( out, fid, (long) exception);
@@ -248,9 +319,10 @@ NATIVE(JSValue,jobject,toStringCopy) (PARAMS, jlong ctxRef, jlong valueRef)
 	jobject out = env->NewObject(ret, cid);
 
 	jfieldID fid = env->GetFieldID(ret , "reference", "J");
-	struct msg_t { JSContextRef ctxRef; JSValueRef valueRef; JSValueRef* exception; long lval; };
-        msg_t msg = { wrapper->context, (JSValueRef)valueRef, &exception, 0L };
-	wrapper->dispatch_q->block([](void *msg) {
+	struct msg_t { JSContextRef ctxRef; JSValueRef valueRef; JSValueRef* exception;
+		long lval; };
+    msg_t msg = { wrapper->context, (JSValueRef)valueRef, &exception, 0L };
+	wrapper->worker_q->sync([](void *msg) {
 		msg_t *m = (msg_t *)msg;
 		m->lval = (long) JSValueToStringCopy(m->ctxRef, m->valueRef, m->exception);
 	}, &msg);
@@ -264,7 +336,6 @@ NATIVE(JSValue,jobject,toStringCopy) (PARAMS, jlong ctxRef, jlong valueRef)
 
 NATIVE(JSValue,jobject,toObject) (PARAMS, jlong ctxRef, jlong valueRef)
 {
-	ctxRef = (jlong) ((JSContextWrapper *)ctxRef)->context;
 	JSValueRef exception = NULL;
 
 	jclass ret = env->FindClass("org/liquidplayer/webkit/javascriptcore/JNIReturnObject");
@@ -272,7 +343,17 @@ NATIVE(JSValue,jobject,toObject) (PARAMS, jlong ctxRef, jlong valueRef)
 	jobject out = env->NewObject(ret, cid);
 
 	jfieldID fid = env->GetFieldID(ret , "reference", "J");
-	env->SetLongField( out, fid, (long) JSValueToObject((JSContextRef) ctxRef, (JSValueRef) valueRef, &exception));
+	
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctxRef;
+	struct msg_t { JSContextRef ctxRef; JSValueRef valueRef; JSValueRef *exception;
+		JSObjectRef ret; };
+	msg_t msg = { wrapper->context, (JSValueRef)valueRef, &exception, NULL };
+	wrapper->worker_q->sync([](void *msg) {
+		msg_t *m = (msg_t *)msg;
+		m->ret = JSValueToObject(m->ctxRef, m->valueRef, m->exception);
+	},&msg);
+
+	env->SetLongField( out, fid, (long) msg.ret);
 
 	fid = env->GetFieldID(ret , "exception", "J");
 	env->SetLongField( out, fid, (long) exception);
@@ -282,16 +363,35 @@ NATIVE(JSValue,jobject,toObject) (PARAMS, jlong ctxRef, jlong valueRef)
 
 /* Garbage collection */
 
-NATIVE(JSValue,void,protect) (PARAMS, jlong ctx, jlong valueRef)
+NATIVE(JSValue,void,protect) (PARAMS, jlong ctxRef, jlong valueRef)
 {
-	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
-	JSValueProtect((JSContextRef) ctx, (JSValueRef) valueRef);
+	JSValueProtect( ((JSContextWrapper*)ctxRef)->context, (JSValueRef)valueRef );
+/*
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctxRef;
+	struct msg_t { JSContextRef ctxRef; JSValueRef valueRef; };
+	msg_t *msg = new msg_t;
+	msg->ctxRef = wrapper->context;
+	msg->valueRef = (JSValueRef)valueRef;
+	wrapper->worker_q->async([](void *msg) {
+		msg_t *m = (msg_t *)msg;
+		JSValueProtect(m->ctxRef, m->valueRef);
+		delete m;
+	},msg);
+*/
 }
 
-NATIVE(JSValue,void,unprotect) (PARAMS, jlong ctx, jlong valueRef)
+NATIVE(JSValue,void,unprotect) (PARAMS, jlong ctxRef, jlong valueRef)
 {
-	ctx = (jlong) ((JSContextWrapper *)ctx)->context;
-	JSValueUnprotect((JSContextRef) ctx, (JSValueRef) valueRef);
+	JSContextWrapper *wrapper = (JSContextWrapper *)ctxRef;
+	struct msg_t { JSContextRef ctxRef; JSValueRef valueRef; };
+	msg_t *msg = new msg_t;
+	msg->ctxRef = wrapper->context;
+	msg->valueRef = (JSValueRef)valueRef;
+	wrapper->worker_q->async([](void *msg) {
+		msg_t *m = (msg_t *)msg;
+		JSValueUnprotect(m->ctxRef, m->valueRef);
+		delete m;
+	},msg);
 }
 
 NATIVE(JSValue,void,setException) (PARAMS, jlong valueRef, jlong exceptionRefRef)

@@ -39,27 +39,50 @@
 #define DISPATCH_QUEUE_FUNCTION 0L
 #define DISPATCH_QUEUE_DESTRUCT 1L
 
-class DispatchQueue {
+class DispatchThread {
 
 public:
-	DispatchQueue();
-	virtual ~DispatchQueue();
+	DispatchThread();
+	virtual ~DispatchThread();
 
+	virtual int async(std::function<void(void *)> func, void *payload);
+	virtual int sync(std::function<void(void *)> func, void *payload);
+	virtual int destroy();
+	virtual pthread_t pThread() { return _thread; }
+	virtual size_t depth() { return thread_queue_length(&_queue); }
+
+protected:
 	virtual int add(std::function<void(void *)> func, void *payload,
 		struct threadqueue *semaphore=NULL);
-	virtual int block(std::function<void(void *)> func, void *payload);
-	virtual int destroy();
 
 private:
-	virtual void* run();
-	static void* _run(void *thiz) { return ((DispatchQueue*)thiz)->run(); }
 	struct threadqueue _queue;
+	pthread_t _thread;
 	struct funct {
 		std::function<void(void *)> func;
 		void *payload;
 		struct threadqueue *semaphore;
 	};
-	pthread_t _thread;
+
+	virtual void* run();
+	static void* _run(void *thiz) { return ((DispatchThread*)thiz)->run(); }
+};
+
+class DispatchQueue {
+
+public:
+	DispatchQueue(unsigned pool=1);
+	virtual ~DispatchQueue();
+
+	virtual int async(std::function<void(void *)> func, void *payload);
+	virtual int sync(std::function<void(void *)> func, void *payload);
+
+protected:
+	virtual DispatchThread *pickThread();
+
+private:
+	DispatchThread *_dispatchThreads;
+	unsigned _pool;
 };
 
 #endif

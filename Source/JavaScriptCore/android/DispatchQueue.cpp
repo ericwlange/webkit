@@ -32,23 +32,55 @@
 */
 #include "DispatchQueue.h"
 
-DispatchQueue::DispatchQueue() {
+DispatchQueue::DispatchQueue(unsigned pool) {
+    pool = (pool<1) ? 1 : (pool>16) ? 16:pool;
+    _dispatchThreads = new DispatchThread[pool];
+    _pool = pool;
+}
+
+DispatchQueue::~DispatchQueue() {
+	delete [] _dispatchThreads;
+}
+
+int DispatchQueue::sync(std::function<void(void *)> func, void *payload) {
+	return pickThread()->sync(func,payload);
+}
+
+int DispatchQueue::async(std::function<void(void *)> func, void *payload) {
+	return pickThread()->async(func,payload);
+}
+
+DispatchThread* DispatchQueue::pickThread() {
+	// If we are already being called from a worker thread, just use that one
+	// Otherwise, we could deadlock
+	unsigned min = 0;
+	size_t best = 0;
+	for( unsigned i=0; i<_pool; i++) {
+		if (pthread_self() == _dispatchThreads[i].pThread()) return &_dispatchThreads[i];
+		if (_dispatchThreads[i].depth() <= best) {
+			min = i;
+			best = _dispatchThreads[i].depth();
+		}
+	}
+	return &_dispatchThreads[min];
+}
+
+/** class DispatchThread **/
+
+DispatchThread::DispatchThread() {
 	thread_queue_init(&_queue);
 	pthread_create(&_thread, NULL, _run, this);
 }
 
-DispatchQueue::~DispatchQueue() {
+DispatchThread::~DispatchThread() {
 	destroy();
 	pthread_join(_thread,NULL);
 	thread_queue_cleanup(&_queue,1);
 }
 
-int DispatchQueue::add(std::function<void(void *)> func, void *payload, struct threadqueue *semaphore) {
-	if (pthread_self() == _thread) {
-		func(payload);
-		return 0;
-	}
-
+int DispatchThread::add(std::function<void(void *)> func, void *payload,
+	struct threadqueue *semaphore) {
+	
 	funct *f = new funct;
 
 	f->func = func;
@@ -57,7 +89,11 @@ int DispatchQueue::add(std::function<void(void *)> func, void *payload, struct t
 	return thread_queue_add(&_queue, f, DISPATCH_QUEUE_FUNCTION);
 }
 
-int DispatchQueue::block(std::function<void(void *)> func, void *payload) {
+int DispatchThread::async(std::function<void(void *)> func, void *payload) {
+	return add(func,payload);
+}
+
+int DispatchThread::sync(std::function<void(void *)> func, void *payload) {
 	if (pthread_self() == _thread) {
 		func(payload);
 		return 0;
@@ -75,11 +111,11 @@ int DispatchQueue::block(std::function<void(void *)> func, void *payload) {
 	return ret;
 }
 
-int DispatchQueue::destroy() {
+int DispatchThread::destroy() {
 	return thread_queue_add(&_queue, NULL, DISPATCH_QUEUE_DESTRUCT);
 }
 
-void* DispatchQueue::run() {
+void* DispatchThread::run() {
 	struct threadmsg msg;
 	volatile bool loop = true;
 	while(loop) {

@@ -38,14 +38,17 @@
 #include "JavaScriptCore/JavaScript.h"
 #include "DispatchQueue.h"
 
-#define NATIVE(package,rt,f) extern "C" rt Java_org_liquidplayer_webkit_javascriptcore_##package##_##f
+#define NATIVE(package,rt,f) extern "C" \
+	rt Java_org_liquidplayer_webkit_javascriptcore_##package##_##f
 #define PARAMS __attribute__((unused))JNIEnv* env, __attribute__((unused))jobject thiz
 
 class JSContextWrapper {
 public:
     DispatchQueue *dispatch_q;
+    DispatchQueue *worker_q;
     JSContextRef context;
-    JSContextWrapper() { dispatch_q = new DispatchQueue(); }
-    virtual ~JSContextWrapper() { delete dispatch_q; }
+    JSContextWrapper() { dispatch_q = new DispatchQueue();
+    	worker_q = new DispatchQueue(2); }
+    virtual ~JSContextWrapper() { delete dispatch_q; delete worker_q; }
 };
 

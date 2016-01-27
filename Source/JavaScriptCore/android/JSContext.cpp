@@ -86,13 +86,13 @@ NATIVE(JSContext,void,finalizeContext) (PARAMS,jlong ctx) {
 }
 
 NATIVE(JSContext,jlong,create) (PARAMS) {
-        JSContextWrapper *wrapper = new JSContextWrapper();
+    JSContextWrapper *wrapper = new JSContextWrapper();
 
 	struct msg_t {
 		JSContextRef ref;
 	};
 	msg_t msg;
-	wrapper->dispatch_q->block([](void *msg){
+	wrapper->dispatch_q->sync([](void *msg){
 		((msg_t*)msg)->ref = JSGlobalContextCreate((JSClassRef) NULL);
 	}, &msg);
 	wrapper->context = msg.ref;
@@ -107,7 +107,7 @@ NATIVE(JSContext,jlong,createInGroup) (PARAMS,jlong group) {
 		JSContextRef ref;
 	};
 	msg_t msg = {(JSContextGroupRef)group, 0};
-	wrapper->dispatch_q->block([](void *msg){
+	wrapper->dispatch_q->sync([](void *msg){
 		((msg_t*)msg)->ref = JSGlobalContextCreateInGroup(((msg_t*)msg)->group,
 			(JSClassRef) NULL);
 	}, &msg);
@@ -135,8 +135,8 @@ NATIVE(JSContext,jlong,getGroup) (PARAMS, jlong ctx) {
 	return (long)JSContextGetGroup((JSContextRef) wrapper->context);
 }
 
-NATIVE(JSContext,jobject,evaluateScript) (PARAMS, jlong ctx, jlong script, jlong thisObject,
-		jlong sourceURL, int startingLineNumber) {
+NATIVE(JSContext,jobject,evaluateScript) (PARAMS, jlong ctx, jlong script,
+	jlong thisObject, jlong sourceURL, int startingLineNumber) {
 
 	JSContextWrapper *wrapper = (JSContextWrapper *)ctx;
 	JSValueRef exception = NULL;
@@ -165,7 +165,7 @@ NATIVE(JSContext,jobject,evaluateScript) (PARAMS, jlong ctx, jlong script, jlong
 		&exception,
 		0L
         };
-	wrapper->dispatch_q->block([](void *msg){
+	wrapper->dispatch_q->sync([](void *msg){
 		msg_t *m = (msg_t *)msg;
 		m->lval = (long) JSEvaluateScript(m->ctx, m->script,
 			m->thisObject, m->sourceURL, m->startingLineNumber, m->exception);
@@ -206,7 +206,7 @@ NATIVE(JSContext,jobject,checkScriptSyntax) (PARAMS, jlong ctx, jlong script,
 		&exception,
 		0L
         };
-	wrapper->dispatch_q->block([](void *msg){
+	wrapper->worker_q->sync([](void *msg){
 		msg_t *m = (msg_t *)msg;
 		m->lval = (long) JSCheckScriptSyntax(m->ctx, m->script,
 			m->sourceURL, m->startingLineNumber, m->exception);
@@ -226,7 +226,7 @@ NATIVE(JSContext,void,garbageCollect) (PARAMS, jlong ctx) {
 	};
 	msg_t *msg = new msg_t;
         msg->ctx = wrapper->context;
-	wrapper->dispatch_q->add([](void *msg){
+	wrapper->worker_q->async([](void *msg){
 		JSGarbageCollect(((msg_t*)msg)->ctx);
 		delete (msg_t*)msg;
 	}, msg);
