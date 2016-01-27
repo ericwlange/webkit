@@ -54,7 +54,7 @@ DispatchThread* DispatchQueue::pickThread() {
 	// If we are already being called from a worker thread, just use that one
 	// Otherwise, we could deadlock
 	unsigned min = 0;
-	size_t best = 0;
+	size_t best = 100;
 	for( unsigned i=0; i<_pool; i++) {
 		if (pthread_self() == _dispatchThreads[i].pThread()) return &_dispatchThreads[i];
 		if (_dispatchThreads[i].depth() <= best) {
